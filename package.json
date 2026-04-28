@@ -13,6 +13,7 @@
     "url": "https://github.com/behagoras/behagoras-skills/issues"
   },
   "type": "module",
+  "packageManager": "pnpm@10.28.2",
   "bin": {
     "behagoras-skills": "cli/dist/index.js"
   },

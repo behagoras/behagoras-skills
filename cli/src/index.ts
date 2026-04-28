@@ -1,10 +1,16 @@
 import { Command, Option } from 'commander';
 import kleur from 'kleur';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { runInstall } from './commands/install.js';
 import { runList } from './commands/list.js';
 import { runUninstall } from './commands/uninstall.js';
 import { runDoctor } from './commands/doctor.js';
 import { runUpdate } from './commands/update.js';
+
+const pkgPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
+const pkgVersion = JSON.parse(readFileSync(pkgPath, 'utf8')).version as string;
 
 interface CommonFlags {
   yes?: boolean;
@@ -31,7 +37,7 @@ async function main(argv: string[]): Promise<number> {
   program
     .name('behagoras-skills')
     .description('Claude Code skills installer — npx behagoras-skills install')
-    .version('0.1.0', '-v, --version', 'print the CLI version')
+    .version(pkgVersion, '-v, --version', 'print the CLI version')
     .addHelpText(
       'after',
       `\nExamples:\n  $ npx behagoras-skills install\n  $ npx behagoras-skills install video-transcript\n  $ npx behagoras-skills doctor\n`

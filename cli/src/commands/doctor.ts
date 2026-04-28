@@ -99,15 +99,15 @@ function printInstallHints(requiredMissing: boolean, optionalMissing: boolean): 
     : kleur.bold('\nOptional deps missing. Install with:');
   console.log(heading);
   if (platform === 'linux') {
-    console.log('  sudo apt update && sudo apt install -y ffmpeg');
-    console.log('  pip install -U --user yt-dlp');
+    console.log('  sudo apt update && sudo apt install -y ffmpeg pipx');
+    console.log('  pipx install yt-dlp');
     if (optionalMissing || requiredMissing) {
-      console.log('  pip install -U --user faster-whisper  # optional, enables audio fallback');
+      console.log('  pipx install whisper-ctranslate2  # optional, enables audio fallback');
     }
   } else if (platform === 'darwin') {
     console.log('  brew install ffmpeg yt-dlp');
     if (optionalMissing || requiredMissing) {
-      console.log('  pip install -U mlx-whisper  # optional, enables audio fallback (Apple Silicon only)');
+      console.log('  pipx install mlx-whisper  # optional, enables audio fallback (Apple Silicon only)');
     }
   } else {
     console.log(`  (no canned hint for platform=${platform}; install yt-dlp, ffmpeg, python3 manually)`);

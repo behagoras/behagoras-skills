@@ -6,7 +6,7 @@
 #   2) Try the captions path: yt-dlp --write-subs / --write-auto-subs
 #   3) If no captions, fall back to audio:
 #        - macOS (Darwin) → mlx_whisper (Apple Silicon, large-v3)
-#        - Linux          → faster-whisper (small int8, ~250MB model)
+#        - Linux          → whisper-ctranslate2 (small int8, ~250MB model)
 #   4) Build markdown with YAML frontmatter via build_note.py
 #   5) On success, delete the downloaded audio + temp dir unless --keep-audio.
 #
@@ -203,7 +203,7 @@ fi
 #
 # Dispatches to the right whisper backend for the host OS:
 #   - Darwin → mlx_whisper (Apple-Silicon, large-v3)
-#   - Linux  → faster-whisper (small int8, ~250MB model — fits a 4GB VPS)
+#   - Linux  → whisper-ctranslate2 (small int8, ~250MB model — fits a 4GB VPS)
 # On any other platform, exits with a clear message.
 #
 # Output contract: writes one of audio*.vtt OR audio*.txt into <output-dir>
@@ -233,18 +233,19 @@ whisper_transcribe() {
       mlx_whisper "${args[@]}" "$audio_file" >&2
       ;;
     faster)
-      if ! command -v faster-whisper >/dev/null 2>&1; then
-        echo "ERROR: faster-whisper not installed. Run: pip install -U --user faster-whisper" >&2
+      if ! command -v whisper-ctranslate2 >/dev/null 2>&1; then
+        echo "ERROR: whisper-ctranslate2 not installed. Run: pipx install whisper-ctranslate2" >&2
         return 6
       fi
-      # The faster-whisper CLI flag set differs from mlx_whisper; the small
-      # int8 model is a ~250MB download on first use, cached under
-      # ~/.cache/huggingface/. compute_type=int8 keeps RAM near 1GB so it
-      # coexists with other services on a 4GB VPS.
+      # whisper-ctranslate2 is the official CLI built on top of faster-whisper.
+      # Plain 'faster-whisper' on PyPI is a library, not a CLI — that's why we
+      # invoke this wrapper instead. The small int8 model is a ~250MB download
+      # on first use, cached under ~/.cache/huggingface/. compute_type=int8
+      # keeps RAM near 1GB so it coexists with other services on a 4GB VPS.
       local args=(--model small --compute_type int8 \
                   --output_format "$out_format" --output_dir "$out_dir")
       [[ -n "$lang" ]] && args+=(--language "$lang")
-      faster-whisper "${args[@]}" "$audio_file" >&2
+      whisper-ctranslate2 "${args[@]}" "$audio_file" >&2
       ;;
     unsupported)
       echo "ERROR: unsupported platform ($(uname -s)) for audio fallback; use the captions path." >&2

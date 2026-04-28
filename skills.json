@@ -20,9 +20,9 @@
             "install": "pipx install mlx-whisper"
           },
           {
-            "binary": "faster-whisper",
+            "binary": "whisper-ctranslate2",
             "platforms": ["linux"],
-            "install": "pip install -U --user faster-whisper"
+            "install": "pipx install whisper-ctranslate2"
           }
         ]
       },

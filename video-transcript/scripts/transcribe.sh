@@ -19,15 +19,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Override with --vault-dir or YT_TRANSCRIPT_VAULT env var.
-VAULT_DIR_DEFAULT="${HOME}/Documents/Vault"
+
+log() { echo "[transcribe] $*" >&2; }
 
 URL=""
 WRITE_NOTE=0
 FORCE_AUDIO=0
 WITH_TIMESTAMPS=0
 LANG_HINT=""
-VAULT_DIR="${YT_TRANSCRIPT_VAULT:-$VAULT_DIR_DEFAULT}"
+VAULT_DIR_FROM_FLAG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
     --force-audio) FORCE_AUDIO=1; shift ;;
     --timestamps) WITH_TIMESTAMPS=1; shift ;;
     --lang) LANG_HINT="$2"; shift 2 ;;
-    --vault-dir) VAULT_DIR="$2"; shift 2 ;;
+    --vault-dir) VAULT_DIR_FROM_FLAG="$2"; shift 2 ;;
     -h|--help)
       sed -n '2,17p' "$0"; exit 0 ;;
     --) shift; URL="$1"; shift ;;
@@ -54,13 +54,83 @@ if [[ -z "$URL" ]]; then
   exit 2
 fi
 
+# --- Config discovery (.transcriptsrc) ---
+# Walks up from CWD looking for a .transcriptsrc file, then falls back to
+# ~/.transcriptsrc. Strict parser — only known keys are read; arbitrary shell
+# in the file is NOT executed.
+#
+# Recognized keys:
+#   vault_dir                  — path for --note (relative paths anchor to the
+#                                .transcriptsrc location, not CWD)
+#   default_with_timestamps    — 1/true/yes to enable --timestamps by default
+#   default_force_audio        — 1/true/yes to enable --force-audio by default
+find_config() {
+  local dir
+  dir="$(pwd -P)"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/.transcriptsrc" ]]; then
+      echo "$dir/.transcriptsrc"; return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  if [[ -f "$HOME/.transcriptsrc" ]]; then
+    echo "$HOME/.transcriptsrc"; return 0
+  fi
+  return 1
+}
+
+parse_config_value() {
+  local file="$1" key="$2"
+  grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" 2>/dev/null \
+    | grep -v "^[[:space:]]*#" \
+    | head -1 \
+    | sed -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//; s/[[:space:]]*#.*$//; s/^['\"]//; s/['\"][[:space:]]*$//"
+}
+
+is_truthy() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+CFG_VAULT_DIR=""
+CFG_FILE="$(find_config || true)"
+if [[ -n "$CFG_FILE" ]]; then
+  CFG_DIR="$(dirname "$CFG_FILE")"
+  log "Using config: $CFG_FILE"
+  CFG_VAULT_DIR="$(parse_config_value "$CFG_FILE" "vault_dir")"
+  CFG_DEFAULT_TS="$(parse_config_value "$CFG_FILE" "default_with_timestamps")"
+  CFG_DEFAULT_FA="$(parse_config_value "$CFG_FILE" "default_force_audio")"
+  # Apply config defaults only if the user didn't pass the corresponding flag.
+  [[ $WITH_TIMESTAMPS -eq 0 ]] && is_truthy "$CFG_DEFAULT_TS" && WITH_TIMESTAMPS=1
+  [[ $FORCE_AUDIO -eq 0 ]] && is_truthy "$CFG_DEFAULT_FA" && FORCE_AUDIO=1
+  # Resolve vault_dir: expand ~ / $HOME, anchor relative paths to CFG_DIR.
+  if [[ -n "$CFG_VAULT_DIR" ]]; then
+    case "$CFG_VAULT_DIR" in
+      "~"*)      CFG_VAULT_DIR="${HOME}${CFG_VAULT_DIR:1}" ;;
+      "\$HOME"*) CFG_VAULT_DIR="${HOME}${CFG_VAULT_DIR:5}" ;;
+    esac
+    [[ "$CFG_VAULT_DIR" != /* ]] && CFG_VAULT_DIR="$CFG_DIR/$CFG_VAULT_DIR"
+  fi
+fi
+
+# Vault precedence: --vault-dir flag > YT_TRANSCRIPT_VAULT env > config > ./.transcripts
+if [[ -n "$VAULT_DIR_FROM_FLAG" ]]; then
+  VAULT_DIR="$VAULT_DIR_FROM_FLAG"
+elif [[ -n "${YT_TRANSCRIPT_VAULT:-}" ]]; then
+  VAULT_DIR="$YT_TRANSCRIPT_VAULT"
+elif [[ -n "$CFG_VAULT_DIR" ]]; then
+  VAULT_DIR="$CFG_VAULT_DIR"
+else
+  VAULT_DIR="$(pwd)/.transcripts"
+fi
+
 # --- dependency checks ---
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required tool: $1" >&2; exit 3; }; }
 need yt-dlp
 need ffmpeg
 need python3
-
-log() { echo "[transcribe] $*" >&2; }
 
 # --- 1) probe metadata ---
 log "Probing metadata for $URL"

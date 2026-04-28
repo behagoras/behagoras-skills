@@ -100,6 +100,17 @@ The reason the summary is opt-in per-call rather than baked into the workflow: s
 
 The slug is derived from the video title — ASCII-fold, strip non-alphanumerics, max 60 chars. Matches the existing convention for AI Notes (`2026-03-02 1618 How to Come Up With...`).
 
+### Choosing the vault
+
+`<vault>` is resolved by `transcribe.sh` in this order (highest wins):
+
+1. `--vault-dir <path>` flag passed on the call
+2. `YT_TRANSCRIPT_VAULT` env var
+3. `vault_dir` key in the nearest `.transcriptsrc` (walks up from CWD, then `~/.transcriptsrc`)
+4. `./.transcripts/` relative to CWD
+
+`.transcriptsrc` also accepts `default_with_timestamps` and `default_force_audio` (boolean) for setting flag defaults per-project. See the repo README for the full schema.
+
 ### Markdown frontmatter
 
 ```yaml

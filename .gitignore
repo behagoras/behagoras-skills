@@ -31,6 +31,9 @@ node_modules/
 *-workspace/
 evals/results/
 
+# Transcript output (generated vault when no .transcriptsrc points elsewhere)
+.transcripts/
+
 # Local secrets and overrides — NEVER commit
 .env
 .env.*

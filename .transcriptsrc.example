@@ -1,0 +1,26 @@
+# .transcriptsrc — config for the video-transcript skill.
+#
+# Place this file at the root of a project (or in $HOME) and it will be picked
+# up automatically. The skill walks up from the current directory looking for
+# the first .transcriptsrc, then falls back to ~/.transcriptsrc.
+#
+# Only the keys below are recognized. The file is parsed strictly — you cannot
+# use shell expansions or commands here (this is intentional; it means cloning
+# a repo with a .transcriptsrc cannot execute code on your machine).
+
+# Where to save vault notes when --note is used.
+# Relative paths are resolved relative to THIS .transcriptsrc file's location,
+# NOT the current working directory. So `vault_dir=./vault` written here means
+# "the vault subdirectory next to this .transcriptsrc".
+# Absolute paths and ~ / $HOME are also supported.
+vault_dir=./.transcripts
+
+# Always include per-cue timestamps in the transcript body.
+# Equivalent to passing --timestamps on every call. Default: off.
+default_with_timestamps=false
+
+# Always skip captions and use the audio path (mlx-whisper).
+# Equivalent to passing --force-audio on every call. Default: off.
+# Useful only if YouTube auto-captions are systematically broken for your
+# typical content (e.g. heavy on proper nouns or non-English).
+default_force_audio=false

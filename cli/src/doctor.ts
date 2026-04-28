@@ -106,7 +106,7 @@ export async function doctorSkill(
       // Don't even include skipped entries in the report — the doctor's
       // current renderer treats them as noise. Filtering at the source
       // keeps the output clean on Linux (no mlx_whisper line) and on
-      // macOS (no faster-whisper line).
+      // macOS (no whisper-ctranslate2 line).
       continue;
     }
     const found = await findOnPath(o.binary);

@@ -53,16 +53,17 @@ The skill is first-class on Linux. The installer wires symlinks the same way as 
 **1. System dependencies.**
 
 ```bash
-sudo apt update && sudo apt install -y ffmpeg
-pip install -U --user yt-dlp
-pip install -U --user faster-whisper  # optional, enables audio fallback
+sudo apt update && sudo apt install -y ffmpeg pipx
+pipx ensurepath  # adds ~/.local/bin to PATH; restart shell or source ~/.bashrc
+pipx install yt-dlp
+pipx install whisper-ctranslate2  # optional, enables audio fallback
 ```
 
-`apt`'s `yt-dlp` is typically stale — install via `pip` to track upstream releases.
+`apt`'s `yt-dlp` is typically stale — `pipx` keeps each tool in its own venv (Ubuntu 24.04+ enforces PEP 668, blocking a global `pip install`).
 
 **2. Disk-footprint expectations.**
 
-The `faster-whisper` audio path uses the `small` int8 model (~250MB), downloaded on first audio-path run and cached under `~/.cache/huggingface/`. Subsequent runs reuse the cache. Downloaded audio files (`audio.m4a`, `audio.opus`, etc.) are deleted automatically after the transcript is written — pass `--keep-audio` to keep them, e.g. when re-running with a different `--lang` flag without re-downloading.
+The `whisper-ctranslate2` audio path uses the `small` int8 model (~250MB), downloaded on first audio-path run and cached under `~/.cache/huggingface/`. Subsequent runs reuse the cache. The CLI is built on `faster-whisper` (the underlying CTranslate2 inference library); we install the wrapper because the bare `faster-whisper` PyPI package ships only a Python API. Downloaded audio files (`audio.m4a`, `audio.opus`, etc.) are deleted automatically after the transcript is written — pass `--keep-audio` to keep them, e.g. when re-running with a different `--lang` flag without re-downloading.
 
 **3. Verify.**
 
@@ -70,7 +71,7 @@ The `faster-whisper` audio path uses the `small` int8 model (~250MB), downloaded
 npx behagoras-skills doctor
 ```
 
-On Linux, doctor checks the same required binaries as on macOS (`yt-dlp`, `ffmpeg`, `python3`) and lists `faster-whisper` as the optional audio-fallback backend. `mlx_whisper` is platform-gated to macOS and not shown.
+On Linux, doctor checks the same required binaries as on macOS (`yt-dlp`, `ffmpeg`, `python3`) and lists `whisper-ctranslate2` as the optional audio-fallback backend. `mlx_whisper` is platform-gated to macOS and not shown.
 
 ## macOS setup
 
@@ -165,12 +166,13 @@ pipx ensurepath
 pipx install mlx-whisper
 
 # Linux (Debian/Ubuntu)
-sudo apt update && sudo apt install -y ffmpeg
-pip install -U --user yt-dlp
-pip install -U --user faster-whisper
+sudo apt update && sudo apt install -y ffmpeg pipx
+pipx ensurepath
+pipx install yt-dlp
+pipx install whisper-ctranslate2
 ```
 
-> **Backend selection is automatic** — `transcribe.sh` detects the OS via `uname -s`. macOS uses `mlx_whisper` (Apple Silicon, large-v3, ~3GB model); Linux uses `faster-whisper` (small int8, ~250MB model). Models are downloaded on first audio-path run into `~/.cache/huggingface/`.
+> **Backend selection is automatic** — `transcribe.sh` detects the OS via `uname -s`. macOS uses `mlx_whisper` (Apple Silicon, large-v3, ~3GB model); Linux uses `whisper-ctranslate2` (small int8, ~250MB model — built on `faster-whisper`). Models are downloaded on first audio-path run into `~/.cache/huggingface/`.
 
 > **macOS Intel / Windows:** the captions path works fine; the audio fallback is unsupported. Stick to URLs with captions or invoke a remote whisper service yourself.
 

@@ -1,0 +1,55 @@
+{
+  "$schema": "./skills.schema.json",
+  "skills": [
+    {
+      "name": "video-transcript",
+      "description": "Extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, ...).",
+      "path": "video-transcript",
+      "commands": [
+        "youtube-transcript",
+        "instagram-transcript",
+        "tiktok-transcript",
+        "video-transcript"
+      ],
+      "requires": {
+        "binaries": ["yt-dlp", "ffmpeg", "python3"],
+        "optional": [
+          {
+            "binary": "mlx_whisper",
+            "platform": "darwin-arm64",
+            "install": "pipx install mlx-whisper"
+          }
+        ]
+      },
+      "prompts": [
+        {
+          "key": "vault_dir",
+          "question": "Where should --note save vault notes? (relative paths anchor to .transcriptsrc location)",
+          "type": "select",
+          "choices": [
+            { "label": "./.transcripts (per-project, gitignored)", "value": "./.transcripts" },
+            { "label": "./spider (matches the spider-openclaw-server pattern)", "value": "./spider" },
+            { "label": "<obsidian-autodetect>", "value": "<obsidian-autodetect>" },
+            { "label": "Custom path…", "value": "<custom>" }
+          ],
+          "default": "./.transcripts",
+          "writes": { "file": ".transcriptsrc", "key": "vault_dir" }
+        },
+        {
+          "key": "default_with_timestamps",
+          "question": "Always emit per-cue timestamps?",
+          "type": "confirm",
+          "default": false,
+          "writes": { "file": ".transcriptsrc", "key": "default_with_timestamps" }
+        },
+        {
+          "key": "default_force_audio",
+          "question": "Always skip captions and use Whisper audio path?",
+          "type": "confirm",
+          "default": false,
+          "writes": { "file": ".transcriptsrc", "key": "default_force_audio" }
+        }
+      ]
+    }
+  ]
+}

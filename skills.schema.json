@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/behagoras/behagoras-skills/blob/main/skills.schema.json",
+  "title": "behagoras-skills manifest",
+  "description": "Source-of-truth manifest for the behagoras-skills CLI installer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["skills"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/skill" }
+    }
+  },
+  "$defs": {
+    "skill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "path", "commands", "requires", "prompts"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Lowercase kebab-case identifier; must match the directory under the repo root."
+        },
+        "description": { "type": "string" },
+        "path": {
+          "type": "string",
+          "description": "Folder relative to the repo root that contains the skill (with SKILL.md)."
+        },
+        "commands": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "description": "Slash command basenames under <repo>/commands/<name>.md."
+        },
+        "requires": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["binaries"],
+          "properties": {
+            "binaries": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "optional": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/optionalBinary" }
+            }
+          }
+        },
+        "prompts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/prompt" }
+        }
+      }
+    },
+    "optionalBinary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary"],
+      "properties": {
+        "binary": { "type": "string" },
+        "platform": {
+          "type": "string",
+          "description": "Restrict applicability to a platform tag like 'darwin-arm64'."
+        },
+        "install": {
+          "type": "string",
+          "description": "Suggested install command shown to the user."
+        }
+      }
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "question", "type", "writes"],
+      "properties": {
+        "key": { "type": "string" },
+        "question": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["select", "confirm", "input"]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        },
+        "default": {
+          "anyOf": [
+            { "type": "string" },
+            { "type": "boolean" },
+            { "type": "number" }
+          ]
+        },
+        "writes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "key"],
+          "properties": {
+            "file": { "type": "string" },
+            "key": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

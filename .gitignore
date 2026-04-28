@@ -26,6 +26,14 @@ dist/
 
 # Node (in case any skill ever pulls it in)
 node_modules/
+.pnpm-store/
+
+# CLI build output
+cli/dist/
+*.tsbuildinfo
+
+# Local CLI smoke-test artifacts
+cli/.tmp/
 
 # Skill workspace / eval artifacts
 *-workspace/

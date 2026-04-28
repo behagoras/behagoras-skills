@@ -1,6 +1,6 @@
 # video-transcript
 
-Extract transcripts from any video URL — YouTube, Shorts, Instagram Reels, TikTok, Vimeo, and 1800+ other sites that `yt-dlp` supports. Falls back to local Whisper (Apple Silicon) when captions are unavailable.
+Extract transcripts from any video URL — YouTube, Shorts, Instagram Reels, TikTok, Vimeo, and 1800+ other sites that `yt-dlp` supports. Falls back to a local whisper backend when captions are unavailable. **Cross-platform**: macOS (Apple Silicon, via `mlx_whisper`) and Linux (via `faster-whisper`) are both first-class.
 
 > Looking for the model-facing contract? See [`SKILL.md`](./SKILL.md).
 
@@ -12,7 +12,7 @@ npx behagoras-skills install video-transcript
 
 This wires up the skill in `~/.claude/skills/video-transcript`, links the slash commands (`/youtube-transcript`, `/instagram-transcript`, `/tiktok-transcript`, `/video-transcript`), and walks you through `.transcriptsrc` setup.
 
-Run `npx behagoras-skills doctor` afterwards to verify `yt-dlp`, `ffmpeg`, and `python3` are on your `PATH` — and `mlx_whisper` too if you're on Apple Silicon and want the audio-fallback path.
+Run `npx behagoras-skills doctor` afterwards to verify `yt-dlp`, `ffmpeg`, and `python3` are on your `PATH`. The doctor will also flag the platform-appropriate whisper backend (`mlx_whisper` on macOS, `faster-whisper` on Linux) as optional — install it only if you need the audio fallback for captionless videos. See the [top-level README](../README.md#linux-setup) for the install one-liners on each platform.
 
 ## Slash commands
 

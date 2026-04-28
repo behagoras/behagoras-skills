@@ -22,10 +22,13 @@ export async function runDoctor(opts: DoctorOptions = {}): Promise<number> {
 }
 
 export function renderDoctorReport(report: DoctorReport): void {
+  let anyRequiredMissing = false;
+  let anyOptionalMissing = false;
   for (const r of report.skills) {
     console.log(kleur.bold(`\n${r.skill}: ${r.ok ? kleur.green('OK') : kleur.red('FAIL')}`));
     console.log(kleur.dim('  Required binaries:'));
     for (const b of r.binaries) {
+      if (!b.found) anyRequiredMissing = true;
       const mark = b.found ? kleur.green('✓') : kleur.red('✗');
       const where = b.found ? kleur.dim(`(${b.resolvedPath})`) : kleur.red('(not on PATH)');
       console.log(`    ${mark} ${b.binary} ${where}`);
@@ -34,11 +37,14 @@ export function renderDoctorReport(report: DoctorReport): void {
       console.log(kleur.dim('  Optional binaries:'));
       for (const b of r.optional) {
         if (b.skipped) {
+          // Rare path now that gating happens at collection time, but kept
+          // for backwards compatibility with older callers.
           console.log(
             `    ${kleur.dim('-')} ${b.binary} ${kleur.dim('(skipped — not applicable on this platform)')}`
           );
           continue;
         }
+        if (!b.found) anyOptionalMissing = true;
         const mark = b.found ? kleur.green('✓') : kleur.yellow('!');
         const where = b.found ? kleur.dim(`(${b.resolvedPath})`) : kleur.yellow('(missing)');
         const install = !b.found && b.install ? kleur.dim(` — try: ${b.install}`) : '';
@@ -72,6 +78,38 @@ export function renderDoctorReport(report: DoctorReport): void {
       }
     }
   }
+  if (anyRequiredMissing || anyOptionalMissing) {
+    printInstallHints(anyRequiredMissing, anyOptionalMissing);
+  }
   console.log();
   console.log(report.ok ? kleur.green('All hard requirements pass.') : kleur.red('Some checks failed.'));
+}
+
+/**
+ * Print a platform-tailored install hint block when something is missing.
+ *
+ * We don't shell out — running `sudo apt` from a Node CLI is brittle (asks
+ * for password mid-pipe, breaks on non-Debian, fights `pip --user` perms).
+ * Printing keeps the user in control.
+ */
+function printInstallHints(requiredMissing: boolean, optionalMissing: boolean): void {
+  const platform = process.platform;
+  const heading = requiredMissing
+    ? kleur.bold('\nMissing required deps. Install with:')
+    : kleur.bold('\nOptional deps missing. Install with:');
+  console.log(heading);
+  if (platform === 'linux') {
+    console.log('  sudo apt update && sudo apt install -y ffmpeg');
+    console.log('  pip install -U --user yt-dlp');
+    if (optionalMissing || requiredMissing) {
+      console.log('  pip install -U --user faster-whisper  # optional, enables audio fallback');
+    }
+  } else if (platform === 'darwin') {
+    console.log('  brew install ffmpeg yt-dlp');
+    if (optionalMissing || requiredMissing) {
+      console.log('  pip install -U mlx-whisper  # optional, enables audio fallback (Apple Silicon only)');
+    }
+  } else {
+    console.log(`  (no canned hint for platform=${platform}; install yt-dlp, ffmpeg, python3 manually)`);
+  }
 }

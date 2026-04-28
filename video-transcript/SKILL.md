@@ -48,16 +48,21 @@ bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --lan
 
 # Include per-segment timestamps in the transcript body
 bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --timestamps
+
+# Keep the downloaded audio after transcription (rare; default is auto-cleanup)
+bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --force-audio --keep-audio
 ```
 
 ## How the script picks a path
 
 ```
 URL → metadata probe → has captions? ─── yes ──→ download VTT, clean to text  (~2s, free)
-                                       └─ no  ──→ download audio + mlx_whisper  (~1-2x realtime, free, local)
+                                       └─ no  ──→ download audio + local whisper backend  (~1-2x realtime, free, local)
 ```
 
-Captions path is always preferred when available — it's instant and accurate to the source. The audio path is the safety net for Reels, TikToks, and Shorts that don't carry captions.
+Captions path is always preferred when available — it's instant and accurate to the source. The audio path is the safety net for Reels, TikToks, and Shorts that don't carry captions. The whisper backend is selected automatically based on the host OS — no flag is needed and Claude shouldn't surface that choice unless the user explicitly asks.
+
+After a successful audio-path run, the downloaded audio file is deleted automatically (the script prints `cleaned up <size>`). Pass `--keep-audio` when re-running with a different `--lang` or `--timestamps` flag to avoid a re-download.
 
 ### When YouTube auto-captions look broken
 
@@ -93,7 +98,7 @@ The reason the summary is opt-in per-call rather than baked into the workflow: s
 - `transcript.txt` — plain text only (used by `build_note.py`)
 - `meta.json` — metadata used to build the note
 - `cap.<lang>.vtt` — raw VTT (only when captions path was used)
-- `audio.m4a` — raw audio (only when audio path was used)
+- `audio.m4a` — raw audio (only when audio path was used **and** `--keep-audio` was passed; otherwise deleted on success)
 
 ### Vault note (only with `--note`)
 `<vault>/AI Notes/transcripts/<YYYY-MM-DD HHMM> <slug>.md`

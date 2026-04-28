@@ -4,11 +4,15 @@
 # Strategy:
 #   1) Probe metadata (yt-dlp --dump-json)
 #   2) Try the captions path: yt-dlp --write-subs / --write-auto-subs
-#   3) If no captions, fall back to audio: yt-dlp -x --audio-format m4a + mlx_whisper
+#   3) If no captions, fall back to audio:
+#        - macOS (Darwin) → mlx_whisper (Apple Silicon, large-v3)
+#        - Linux          → faster-whisper (small int8, ~250MB model)
 #   4) Build markdown with YAML frontmatter via build_note.py
+#   5) On success, delete the downloaded audio + temp dir unless --keep-audio.
 #
 # Usage:
-#   transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG] [--vault-dir DIR]
+#   transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG]
+#                       [--vault-dir DIR] [--keep-audio]
 #
 # Output:
 #   /tmp/transcripts/<id>/transcript.md  (always)
@@ -28,6 +32,7 @@ FORCE_AUDIO=0
 WITH_TIMESTAMPS=0
 LANG_HINT=""
 VAULT_DIR_FROM_FLAG=""
+KEEP_AUDIO=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,8 +41,9 @@ while [[ $# -gt 0 ]]; do
     --timestamps) WITH_TIMESTAMPS=1; shift ;;
     --lang) LANG_HINT="$2"; shift 2 ;;
     --vault-dir) VAULT_DIR_FROM_FLAG="$2"; shift 2 ;;
+    --keep-audio) KEEP_AUDIO=1; shift ;;
     -h|--help)
-      sed -n '2,17p' "$0"; exit 0 ;;
+      sed -n '2,21p' "$0"; exit 0 ;;
     --) shift; URL="$1"; shift ;;
     -*)
       echo "Unknown flag: $1" >&2; exit 2 ;;
@@ -50,7 +56,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$URL" ]]; then
-  echo "Usage: transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG] [--vault-dir DIR]" >&2
+  echo "Usage: transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG] [--vault-dir DIR] [--keep-audio]" >&2
   exit 2
 fi
 
@@ -192,12 +198,71 @@ else
 fi
 
 # --- 3) audio fallback ---
+#
+# whisper_transcribe <audio-file> <output-dir> <"vtt"|"txt"> [<lang>]
+#
+# Dispatches to the right whisper backend for the host OS:
+#   - Darwin → mlx_whisper (Apple-Silicon, large-v3)
+#   - Linux  → faster-whisper (small int8, ~250MB model — fits a 4GB VPS)
+# On any other platform, exits with a clear message.
+#
+# Output contract: writes one of audio*.vtt OR audio*.txt into <output-dir>
+# (whichever matches the requested format). The caller still does the
+# vtt_to_text.py post-processing for timestamp mode.
+whisper_transcribe() {
+  local audio_file="$1"
+  local out_dir="$2"
+  local out_format="$3"  # vtt | txt
+  local lang="${4:-}"
+  local backend
+  case "$(uname -s)" in
+    Darwin) backend="mlx" ;;
+    Linux)  backend="faster" ;;
+    *)      backend="unsupported" ;;
+  esac
+
+  case "$backend" in
+    mlx)
+      if ! command -v mlx_whisper >/dev/null 2>&1; then
+        echo "ERROR: mlx_whisper not installed. Run: pipx install mlx-whisper (Apple Silicon required)." >&2
+        return 6
+      fi
+      local args=(--model "mlx-community/whisper-large-v3-mlx" \
+                  --output-dir "$out_dir" --output-format "$out_format")
+      [[ -n "$lang" ]] && args+=(--language "$lang")
+      mlx_whisper "${args[@]}" "$audio_file" >&2
+      ;;
+    faster)
+      if ! command -v faster-whisper >/dev/null 2>&1; then
+        echo "ERROR: faster-whisper not installed. Run: pip install -U --user faster-whisper" >&2
+        return 6
+      fi
+      # The faster-whisper CLI flag set differs from mlx_whisper; the small
+      # int8 model is a ~250MB download on first use, cached under
+      # ~/.cache/huggingface/. compute_type=int8 keeps RAM near 1GB so it
+      # coexists with other services on a 4GB VPS.
+      local args=(--model small --compute_type int8 \
+                  --output_format "$out_format" --output_dir "$out_dir")
+      [[ -n "$lang" ]] && args+=(--language "$lang")
+      faster-whisper "${args[@]}" "$audio_file" >&2
+      ;;
+    unsupported)
+      echo "ERROR: unsupported platform ($(uname -s)) for audio fallback; use the captions path." >&2
+      return 6
+      ;;
+  esac
+}
+
+# Track files we downloaded so cleanup only touches what we created.
+DOWNLOADED_AUDIO=""
+
 if [[ -z "$PATH_USED" ]]; then
   log "Downloading audio for transcription"
   AUDIO_FILE="$WORKDIR/audio.m4a"
   yt-dlp --no-warnings -x --audio-format m4a \
     -o "$WORKDIR/audio.%(ext)s" "$URL" >&2 || {
       echo "ERROR: yt-dlp failed to download audio for $URL" >&2
+      echo "       Audio (if any) left at: $WORKDIR (not cleaned — debug or retry)" >&2
       exit 5
     }
   if [[ ! -f "$AUDIO_FILE" ]]; then
@@ -206,33 +271,32 @@ if [[ -z "$PATH_USED" ]]; then
   fi
   if [[ -z "$AUDIO_FILE" || ! -f "$AUDIO_FILE" ]]; then
     echo "ERROR: Audio file not found after yt-dlp run" >&2
+    echo "       Workdir left for inspection: $WORKDIR" >&2
     exit 5
   fi
-  log "Transcribing audio with mlx_whisper: $AUDIO_FILE"
-  if ! command -v mlx_whisper >/dev/null 2>&1; then
-    echo "ERROR: mlx_whisper not installed. Run: pipx install mlx-whisper" >&2
-    exit 6
-  fi
-  # When timestamps are requested we ask mlx_whisper for VTT (timestamps preserved).
-  # Plain text comes out cleanly without further processing for non-timestamp mode.
+  DOWNLOADED_AUDIO="$AUDIO_FILE"
+  log "Transcribing audio with $(uname -s) backend: $AUDIO_FILE"
   if [[ $WITH_TIMESTAMPS -eq 1 ]]; then
-    WHISPER_ARGS=(--model "mlx-community/whisper-large-v3-mlx" --output-dir "$WORKDIR" --output-format vtt)
-  else
-    WHISPER_ARGS=(--model "mlx-community/whisper-large-v3-mlx" --output-dir "$WORKDIR" --output-format txt)
-  fi
-  if [[ -n "$LANG_HINT" ]]; then WHISPER_ARGS+=(--language "$LANG_HINT"); fi
-  mlx_whisper "${WHISPER_ARGS[@]}" "$AUDIO_FILE" >&2
-  if [[ $WITH_TIMESTAMPS -eq 1 ]]; then
+    if ! whisper_transcribe "$AUDIO_FILE" "$WORKDIR" vtt "$LANG_HINT"; then
+      echo "       Audio left for inspection: $AUDIO_FILE" >&2
+      exit 6
+    fi
     WHISPER_VTT=$(ls -1 "$WORKDIR"/audio*.vtt 2>/dev/null | head -1 || true)
     if [[ -z "$WHISPER_VTT" ]]; then
-      echo "ERROR: mlx_whisper did not produce a .vtt output" >&2
+      echo "ERROR: whisper backend did not produce a .vtt output" >&2
+      echo "       Audio left for inspection: $AUDIO_FILE" >&2
       exit 6
     fi
     python3 "$SCRIPT_DIR/vtt_to_text.py" --with-timestamps "$WHISPER_VTT" > "$TRANSCRIPT_TXT"
   else
+    if ! whisper_transcribe "$AUDIO_FILE" "$WORKDIR" txt "$LANG_HINT"; then
+      echo "       Audio left for inspection: $AUDIO_FILE" >&2
+      exit 6
+    fi
     WHISPER_TXT=$(ls -1 "$WORKDIR"/audio*.txt 2>/dev/null | head -1 || true)
     if [[ -z "$WHISPER_TXT" ]]; then
-      echo "ERROR: mlx_whisper did not produce a .txt output" >&2
+      echo "ERROR: whisper backend did not produce a .txt output" >&2
+      echo "       Audio left for inspection: $AUDIO_FILE" >&2
       exit 6
     fi
     cp "$WHISPER_TXT" "$TRANSCRIPT_TXT"
@@ -298,6 +362,35 @@ print(t[:60].rstrip())")
   mkdir -p "$NOTE_DIR"
   cp "$TRANSCRIPT_MD" "$NOTE_DIR/$NOTE_NAME"
   log "Wrote vault note: $NOTE_DIR/$NOTE_NAME"
+fi
+
+# --- 6) cleanup of downloaded audio ---
+#
+# Always-on by design (the VPS this runs on is disk-constrained). The user
+# can opt out with --keep-audio when they want to re-run with different flags
+# without re-downloading.
+#
+# We only delete files the script itself produced from the download:
+#   - audio.<ext> (m4a/opus/webm) — the yt-dlp output
+#   - audio*.vtt / audio*.txt     — the whisper sidecar outputs
+# We do NOT touch transcript.md, transcript.txt, meta.json, or cap*.vtt
+# (captions). If the workdir is empty after that, remove it too.
+if [[ $PATH_USED == "audio" && $KEEP_AUDIO -eq 0 && -n "$DOWNLOADED_AUDIO" ]]; then
+  # Compute size before deletion (best-effort; portable du across darwin/linux).
+  CLEANED_SIZE=""
+  if [[ -d "$WORKDIR" ]]; then
+    CLEANED_SIZE=$(du -sh "$WORKDIR" 2>/dev/null | awk '{print $1}' || true)
+  fi
+  # Match the audio download + whisper sidecars we created. The leading
+  # "audio." prefix is hardcoded by the yt-dlp -o template above.
+  shopt -s nullglob
+  for f in "$WORKDIR"/audio.* "$WORKDIR"/audio*.vtt "$WORKDIR"/audio*.txt; do
+    [[ -f "$f" && "$f" != "$TRANSCRIPT_TXT" && "$f" != "$TRANSCRIPT_MD" ]] && rm -f "$f"
+  done
+  shopt -u nullglob
+  log "Cleaned up audio artifacts (was ${CLEANED_SIZE:-unknown})"
+elif [[ $PATH_USED == "audio" && $KEEP_AUDIO -eq 1 ]]; then
+  log "Keeping audio file (--keep-audio): $DOWNLOADED_AUDIO"
 fi
 
 # Final line of stdout = canonical markdown path (skill consumer reads this)

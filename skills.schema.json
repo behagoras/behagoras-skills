@@ -66,7 +66,16 @@
         "binary": { "type": "string" },
         "platform": {
           "type": "string",
-          "description": "Restrict applicability to a platform tag like 'darwin-arm64'."
+          "description": "DEPRECATED: legacy platform tag like 'darwin-arm64'. Prefer the `platforms` array."
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["darwin", "linux", "win32"]
+          },
+          "minItems": 1,
+          "description": "Restrict applicability to one or more `process.platform` values. When omitted, the binary applies to all platforms."
         },
         "install": {
           "type": "string",

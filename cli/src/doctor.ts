@@ -71,9 +71,20 @@ function platformTag(): string {
   return `${process.platform}-${process.arch}`;
 }
 
-function appliesToPlatform(platform?: string): boolean {
-  if (!platform) return true;
-  return platform === platformTag();
+/**
+ * Decide whether an optional binary applies to the current platform.
+ *
+ * Preference order:
+ *   1. `platforms` array (new) — match against `process.platform`.
+ *   2. `platform` tag (legacy) — match against `<process.platform>-<process.arch>`.
+ *   3. Neither — applies everywhere.
+ */
+function appliesToPlatform(o: { platform?: string; platforms?: string[] }): boolean {
+  if (o.platforms && o.platforms.length > 0) {
+    return o.platforms.includes(process.platform);
+  }
+  if (o.platform) return o.platform === platformTag();
+  return true;
 }
 
 export async function doctorSkill(
@@ -91,13 +102,11 @@ export async function doctorSkill(
 
   const optional: BinaryCheck[] = [];
   for (const o of skill.requires.optional ?? []) {
-    if (!appliesToPlatform(o.platform)) {
-      optional.push({
-        binary: o.binary,
-        found: false,
-        skipped: true,
-        install: o.install,
-      });
+    if (!appliesToPlatform(o)) {
+      // Don't even include skipped entries in the report — the doctor's
+      // current renderer treats them as noise. Filtering at the source
+      // keeps the output clean on Linux (no mlx_whisper line) and on
+      // macOS (no faster-whisper line).
       continue;
     }
     const found = await findOnPath(o.binary);

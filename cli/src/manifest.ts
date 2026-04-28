@@ -2,9 +2,14 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020.js';
 
+export type Platform = 'darwin' | 'linux' | 'win32';
+
 export interface OptionalBinary {
   binary: string;
+  /** Legacy single-tag platform field (e.g. `darwin-arm64`). Prefer `platforms`. */
   platform?: string;
+  /** Restrict to one or more `process.platform` values. When omitted, applies to all platforms. */
+  platforms?: Platform[];
   install?: string;
 }
 

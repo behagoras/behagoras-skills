@@ -94,9 +94,23 @@ async function main(argv: string[]): Promise<number> {
   // update
   program
     .command('update')
-    .description('git pull + reinstall dependencies (clone install only)')
+    .description('reconcile installed skills with the current manifest (incremental sync)')
+    .option('-y, --yes', 'skip prompts and accept declared defaults for newly-added keys', false)
+    .addOption(
+      new Option('--scope <scope>', 'install scope').choices(['global', 'local']).default('global')
+    )
     .option('--repo-root <path>', 'override the package install location (development)')
-    .action(async (options: CommonFlags) => {
+    .option(
+      '--clean',
+      'destructive: uninstall every skill then reinstall (rare; use only when normal update fails)',
+      false
+    )
+    .option(
+      '--prune',
+      'remove symlinks pointing at this repo for commands no longer in the manifest',
+      false
+    )
+    .action(async (options: CommonFlags & { clean?: boolean; prune?: boolean }) => {
       const code = await runUpdate(options);
       process.exitCode = code;
     });

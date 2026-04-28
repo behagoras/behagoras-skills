@@ -1,0 +1,40 @@
+{
+  "skill_name": "video-transcript",
+  "evals": [
+    {
+      "id": 1,
+      "name": "yt-short-captions-en",
+      "prompt": "https://www.youtube.com/shorts/s8wrflAh_T0",
+      "expected_output": "Markdown transcript file with YAML frontmatter (title, url, video_id, platform=youtube, source=captions, language=en or en-orig). Body contains the actual spoken English transcript about Claude AI for competitive research, no duplicated lines. Followed by a chat reply that asks the user about a summary with 4 levels.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "yt-long-captions-en",
+      "prompt": "Sácame la transcripción de https://www.youtube.com/watch?v=bXnRA3pJavE",
+      "expected_output": "Markdown transcript for ~20-min video '8 Claude Skills I Can't Live Without', captions path, EN. Long body. Reply in Spanish (user wrote in Spanish), shows metadata + first paragraph + path to full file (transcript too long to inline). Asks the summary question in Spanish.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "ig-reel-short-audio-es",
+      "prompt": "Qué dice este reel? https://www.instagram.com/p/DW2TanyDrRW/",
+      "expected_output": "Markdown transcript for 39s Instagram Reel by David Cohen. Should fall back to audio path (no IG captions). source=audio, platform=instagram. Reply in Spanish, transcript inline (short content), summary question in Spanish.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "ig-reel-medium-audio",
+      "prompt": "transcríbeme este reel y guárdalo en mi vault: https://www.instagram.com/p/DWsmDQngoZ7/",
+      "expected_output": "Markdown transcript for 1:37 Reel by Enrique Rocha. Audio path. --note flag should be used because user said 'guárdalo en mi vault'. Both /tmp path and vault path confirmed. Summary question in Spanish.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "yt-short-force-audio",
+      "prompt": "Hazlo de nuevo pero con audio, los captions están raros: https://www.youtube.com/shorts/jdfX3eU0UVg",
+      "expected_output": "Markdown transcript for 27s Mythos short. User asked to skip captions, so --force-audio should be used. source=audio, platform=youtube. Transcript should match the captions version closely (same content) but produced via Whisper. Summary question in Spanish.",
+      "files": []
+    }
+  ]
+}

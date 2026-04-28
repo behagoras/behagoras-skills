@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.idea/
+.vscode/
+
+# Skill workspace artifacts (test runs, eval outputs)
+*-workspace/
+evals/results/

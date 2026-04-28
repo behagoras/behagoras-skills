@@ -37,7 +37,7 @@ $ npx behagoras-skills <subcommand>
 | `list` | Print every skill and its installation status (`installed`, `not installed`, `broken-symlink`, `installed-elsewhere`). |
 | `uninstall <skill>` | Remove the symlinks created by install. Leaves your clone, `.transcriptsrc`, and skill folder alone. |
 | `doctor` | Verify required binaries and symlinks for installed skills. Exits 0 when all hard requirements pass. |
-| `update` | Git-clone path: `git pull` + reinstall deps. npx path: prints the `@latest` reinvocation hint. |
+| `update` | Reconcile installed skills with the current manifest (incremental sync — never blows away `.transcriptsrc`). Flags: `--clean` (destructive uninstall+reinstall), `--prune` (remove symlinks for commands no longer in the manifest). |
 
 Common flags (work on every subcommand):
 
@@ -45,6 +45,52 @@ Common flags (work on every subcommand):
 - `--scope global|local` — default `global` (`~/.claude/`); `local` writes into `<cwd>/.claude/`.
 - `--repo-root <path>` — override the package install location (development).
 - `--force` — on `install`, overwrite divergent symlinks and replace existing rc files.
+
+## Linux setup
+
+The skill is first-class on Linux. The installer wires symlinks the same way as on macOS; only the system dependencies and the audio-fallback backend differ.
+
+**1. System dependencies.**
+
+```bash
+sudo apt update && sudo apt install -y ffmpeg
+pip install -U --user yt-dlp
+pip install -U --user faster-whisper  # optional, enables audio fallback
+```
+
+`apt`'s `yt-dlp` is typically stale — install via `pip` to track upstream releases.
+
+**2. Disk-footprint expectations.**
+
+The `faster-whisper` audio path uses the `small` int8 model (~250MB), downloaded on first audio-path run and cached under `~/.cache/huggingface/`. Subsequent runs reuse the cache. Downloaded audio files (`audio.m4a`, `audio.opus`, etc.) are deleted automatically after the transcript is written — pass `--keep-audio` to keep them, e.g. when re-running with a different `--lang` flag without re-downloading.
+
+**3. Verify.**
+
+```bash
+npx behagoras-skills doctor
+```
+
+On Linux, doctor checks the same required binaries as on macOS (`yt-dlp`, `ffmpeg`, `python3`) and lists `faster-whisper` as the optional audio-fallback backend. `mlx_whisper` is platform-gated to macOS and not shown.
+
+## macOS setup
+
+```bash
+brew install ffmpeg yt-dlp pipx
+pipx ensurepath
+pipx install mlx-whisper  # optional, enables audio fallback (Apple Silicon only)
+```
+
+The audio path uses `mlx_whisper` with the `large-v3` model. First audio-path run downloads ~3GB into `~/.cache/huggingface/`.
+
+## Updating
+
+```bash
+npx behagoras-skills update              # incremental sync (default)
+npx behagoras-skills update --prune      # also remove symlinks for commands no longer in the manifest
+npx behagoras-skills update --clean      # destructive: uninstall+reinstall (rare)
+```
+
+The default mode is non-destructive: existing `.transcriptsrc` keys are preserved verbatim, divergent symlinks (e.g. left over from a previous npx tmp install) get re-pointed at the current location, and newly-declared commands or rcfile keys are added. Use `--clean` only when a normal update fails or you're migrating to a different scope.
 
 ## Configuration — `.transcriptsrc`
 
@@ -110,18 +156,23 @@ node -e "const Ajv=require('ajv').default; const a=new Ajv(); const v=a.compile(
 
 If you cannot install Node, you can still wire up the skill by hand.
 
-**1. System dependencies.** The skill needs `yt-dlp`, `ffmpeg`, Python 3.9+, and (for the audio fallback) `mlx-whisper`.
+**1. System dependencies.** The skill needs `yt-dlp`, `ffmpeg`, Python 3.9+, and (for the audio fallback) a whisper backend matched to your platform.
 
 ```bash
-# macOS (Apple Silicon — full functionality)
+# macOS (Apple Silicon)
 brew install yt-dlp ffmpeg pipx
 pipx ensurepath
 pipx install mlx-whisper
+
+# Linux (Debian/Ubuntu)
+sudo apt update && sudo apt install -y ffmpeg
+pip install -U --user yt-dlp
+pip install -U --user faster-whisper
 ```
 
-> **macOS Intel / Linux / Windows:** the captions path works fine, but the audio fallback (used when a video has no captions — Reels, TikToks, etc.) requires `mlx-whisper`, which is **Apple Silicon only**. Either stick to URLs with captions, or swap the `mlx_whisper` invocation in `scripts/transcribe.sh` for [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp) / OpenAI / Groq.
+> **Backend selection is automatic** — `transcribe.sh` detects the OS via `uname -s`. macOS uses `mlx_whisper` (Apple Silicon, large-v3, ~3GB model); Linux uses `faster-whisper` (small int8, ~250MB model). Models are downloaded on first audio-path run into `~/.cache/huggingface/`.
 
-> **First audio run** downloads the Whisper model (~3GB, `mlx-community/whisper-large-v3-mlx`) into `~/.cache/huggingface/`. One-time cost.
+> **macOS Intel / Windows:** the captions path works fine; the audio fallback is unsupported. Stick to URLs with captions or invoke a remote whisper service yourself.
 
 **2. Clone and symlink.** Claude Code reads skills from `~/.claude/skills/` and slash commands from `~/.claude/commands/`:
 

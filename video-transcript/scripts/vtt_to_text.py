@@ -21,9 +21,13 @@ import re
 import sys
 from pathlib import Path
 
-TIMING_TAG = re.compile(r"<\d{2}:\d{2}:\d{2}\.\d{3}>")
+# Note: mlx_whisper emits VTT with MM:SS.mmm (no hours); YouTube emits with
+# HH:MM:SS.mmm. Accept both shapes everywhere we match a timestamp.
+TIMING_TAG = re.compile(r"<(?:\d{2}:)?\d{2}:\d{2}\.\d{3}>")
 CTAG = re.compile(r"</?c[^>]*>")
-TIMESTAMP_LINE = re.compile(r"^\d{2}:\d{2}:\d{2}\.\d{3}\s+-->\s+\d{2}:\d{2}:\d{2}\.\d{3}")
+TIMESTAMP_LINE = re.compile(
+    r"^(?:\d{2}:)?\d{2}:\d{2}\.\d{3}\s+-->\s+(?:\d{2}:)?\d{2}:\d{2}\.\d{3}"
+)
 
 
 def parse_cues(path: Path) -> list[dict]:
@@ -124,7 +128,10 @@ def merge_cues_with_timestamps(cues: list[dict]) -> str:
 
 
 def _format_timestamp(raw: str) -> str:
-    """Normalize 'HH:MM:SS.mmm' → 'HH:MM:SS' (or 'MM:SS' if hours are zero)."""
+    """Normalize timestamps:
+    - 'HH:MM:SS.mmm' → 'HH:MM:SS', or 'MM:SS' if hours are zero (YouTube VTT)
+    - 'MM:SS.mmm'    → 'MM:SS' (mlx_whisper VTT)
+    """
     if not raw:
         return "00:00"
     base = raw.split(".")[0]

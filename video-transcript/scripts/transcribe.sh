@@ -19,6 +19,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Override with --vault-dir or YT_TRANSCRIPT_VAULT env var.
 VAULT_DIR_DEFAULT="${HOME}/Documents/Vault"
 
 URL=""
@@ -179,18 +180,30 @@ case "$EXTRACTOR" in
   Twitter*|X*) PLATFORM="twitter" ;;
 esac
 
-python3 - <<PY > "$META_FILE"
-import json
+# Build meta.json from the original yt-dlp metadata (avoids interpolating
+# untrusted strings like the video title into a Python heredoc).
+META_DUR="$DURATION" \
+META_PLATFORM="$PLATFORM" \
+META_LANG="$LANG_USED" \
+META_SOURCE="$PATH_USED" \
+python3 - "$URL" "$VIDEO_ID" "$TITLE" "$UPLOADER" "$UPLOAD_DATE" <<'PY' > "$META_FILE"
+import json, os, sys
+url, vid, title, uploader, upload_date = sys.argv[1:6]
+duration_raw = os.environ.get("META_DUR", "0")
+try:
+    duration = int(duration_raw) if duration_raw else 0
+except ValueError:
+    duration = 0
 meta = {
-  "id": "$VIDEO_ID",
-  "title": """$TITLE""",
-  "url": "$URL",
-  "uploader": """$UPLOADER""",
-  "duration": $DURATION,
-  "platform": "$PLATFORM",
-  "language": "$LANG_USED",
-  "source": "$PATH_USED",
-  "upload_date": "$UPLOAD_DATE",
+    "id": vid,
+    "title": title,
+    "url": url,
+    "uploader": uploader,
+    "duration": duration,
+    "platform": os.environ.get("META_PLATFORM", ""),
+    "language": os.environ.get("META_LANG", ""),
+    "source": os.environ.get("META_SOURCE", ""),
+    "upload_date": upload_date,
 }
 print(json.dumps(meta, ensure_ascii=False, indent=2))
 PY

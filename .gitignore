@@ -1,11 +1,48 @@
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
 .venv/
-.idea/
-.vscode/
+venv/
+.python-version
+*.egg-info/
+build/
+dist/
 
-# Skill workspace artifacts (test runs, eval outputs)
+# Node (in case any skill ever pulls it in)
+node_modules/
+
+# Skill workspace / eval artifacts
 *-workspace/
 evals/results/
+
+# Local secrets and overrides — NEVER commit
+.env
+.env.*
+*.secret
+*.key
+*.pem
+
+# Logs and temp output
+*.log
+tmp/
+temp/
+
+# Local-only configs (e.g. personal vault paths)
+.local.sh
+local.config.json

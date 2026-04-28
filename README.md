@@ -23,10 +23,32 @@ Discoverability aliases that all delegate to the `video-transcript` skill. They 
 
 ## Installing
 
-Claude Code reads skills from `~/.claude/skills/` and slash commands from `~/.claude/commands/`. Clone the repo once, then symlink each artifact you want:
+### 1. System dependencies
+
+The `video-transcript` skill needs `yt-dlp`, `ffmpeg`, Python 3.9+, and (for the audio fallback) `mlx-whisper`.
+
+**macOS (Apple Silicon — full functionality):**
+
+```bash
+brew install yt-dlp ffmpeg pipx
+pipx ensurepath
+pipx install mlx-whisper
+```
+
+**macOS Intel / Linux / Windows:** the captions path works, but the audio fallback (used when a video has no captions, e.g. Instagram Reels and TikToks) requires `mlx-whisper`, which is **Apple Silicon only**. On other platforms you can either:
+- Stick to URLs that have captions (most YouTube videos do), or
+- Replace the audio path with [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp) or the OpenAI/Groq Whisper API by editing `scripts/transcribe.sh` (the `mlx_whisper` invocation is one block).
+
+**First audio run downloads the Whisper model** (~3GB, `mlx-community/whisper-large-v3-mlx`) into the HuggingFace cache (`~/.cache/huggingface/`). One-time cost.
+
+### 2. Clone and symlink
+
+Claude Code reads skills from `~/.claude/skills/` and slash commands from `~/.claude/commands/`. Clone once, then symlink each artifact you want:
 
 ```bash
 git clone https://github.com/behagoras/behagoras-skills.git ~/git/projects/behagoras-skills
+
+mkdir -p ~/.claude/skills ~/.claude/commands
 
 # Skill
 ln -s ~/git/projects/behagoras-skills/video-transcript ~/.claude/skills/video-transcript
@@ -39,13 +61,15 @@ done
 
 Or copy the folders/files directly if you prefer not to use symlinks.
 
-## Per-skill requirements
+### 3. (Optional) Point `--note` at your Obsidian vault
 
-Each skill's `SKILL.md` documents what's required at runtime. Common system dependencies referenced across these skills:
+By default `--note` writes to `~/Documents/Vault/AI Notes/transcripts/`. To save into your own vault, add this to your shell rc:
 
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) — video URL fetching
-- [`ffmpeg`](https://ffmpeg.org/) — audio extraction
-- [`mlx-whisper`](https://github.com/ml-explore/mlx-examples/tree/main/whisper) — local audio transcription on Apple Silicon (`pipx install mlx-whisper`)
+```bash
+export YT_TRANSCRIPT_VAULT="$HOME/path/to/your/obsidian-vault"
+```
+
+Or pass `--vault-dir <path>` per call.
 
 ## License
 

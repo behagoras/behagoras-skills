@@ -57,7 +57,9 @@ Whisper-large-v3 typically produces noticeably cleaner output than YouTube's aut
 
 ## Vault path doesn't exist
 
-Default vault is `$HOME/Documents/Vault`. Override with `--vault-dir /path/to/vault` or set `YT_TRANSCRIPT_VAULT` env var.
+Default vault is `$HOME/Documents/Vault`. Override with `--vault-dir /path/to/vault` or set the `YT_TRANSCRIPT_VAULT` env var (e.g. add `export YT_TRANSCRIPT_VAULT="$HOME/path/to/your/obsidian-vault"` to your shell rc).
+
+The `--note` flag writes to `<vault>/AI Notes/transcripts/`. The script will `mkdir -p` that subdirectory, but the vault root must exist.
 
 ## Transcript is empty or just whitespace
 
@@ -67,7 +69,7 @@ Default vault is `$HOME/Documents/Vault`. Override with `--vault-dir /path/to/va
 ## Running the script directly for debugging
 
 ```bash
-bash -x "$HOME/.claude/skills/youtube-transcript/scripts/transcribe.sh" <url>
+bash -x "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" <url>
 ```
 
 `bash -x` traces every command. Useful when something fails silently.

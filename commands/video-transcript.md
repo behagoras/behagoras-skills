@@ -24,4 +24,4 @@ Generic transcript entry point. Use when the URL isn't covered by the platform-s
 
 4. If they pick a level, generate the summary in the language of the transcript.
 
-Flags: `--note` (save to Obsidian vault), `--force-audio` (skip captions, use Whisper), `--lang <code>` (hint the language). See `$HOME/.claude/skills/video-transcript/SKILL.md` for full docs.
+Flags: `--note` (save to Obsidian vault), `--force-audio` (skip captions, use Whisper — useful when auto-captions are mangled), `--timestamps` (one line per cue with `[MM:SS]` prefix), `--lang <code>` (hint the language). See `$HOME/.claude/skills/video-transcript/SKILL.md` for full docs.

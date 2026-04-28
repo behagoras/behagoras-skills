@@ -27,4 +27,4 @@ The user wants to extract a transcript from a TikTok URL. Thin alias for the `vi
 
 5. If they pick a level, generate the summary in the language of the transcript.
 
-If TikTok geo-blocks the IP or shows a login wall, see `$HOME/.claude/skills/video-transcript/references/troubleshooting.md` (`--cookies-from-browser` workaround). For Spanish-only content, pass `--lang es`. To persist in vault, pass `--note`.
+If TikTok geo-blocks the IP or shows a login wall, see `$HOME/.claude/skills/video-transcript/references/troubleshooting.md` (`--cookies-from-browser` workaround). For Spanish-only content, pass `--lang es`. To persist in vault, pass `--note`. For per-segment timestamps add `--timestamps`.

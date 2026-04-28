@@ -99,6 +99,41 @@ def merge_cues(cues: list[dict]) -> str:
     return re.sub(r"\s+", " ", output).strip()
 
 
+def merge_cues_with_timestamps(cues: list[dict]) -> str:
+    """Like merge_cues, but emits one line per surviving cue prefixed with
+    its start timestamp in [HH:MM:SS] format. Drops cues that contribute no
+    novel content.
+    """
+    lines: list[str] = []
+    running = ""
+    for cue in cues:
+        text = cue["text"]
+        if not text:
+            continue
+        if text in running:
+            continue
+        overlap = _max_overlap(running, text)
+        novel = text[overlap:].lstrip()
+        if not novel:
+            continue
+        ts = _format_timestamp(cue.get("start", ""))
+        lines.append(f"[{ts}] {novel}")
+        sep = "" if (not running or running.endswith((" ", "\n"))) else " "
+        running += sep + novel
+    return "\n".join(lines)
+
+
+def _format_timestamp(raw: str) -> str:
+    """Normalize 'HH:MM:SS.mmm' → 'HH:MM:SS' (or 'MM:SS' if hours are zero)."""
+    if not raw:
+        return "00:00"
+    base = raw.split(".")[0]
+    parts = base.split(":")
+    if len(parts) == 3 and parts[0] == "00":
+        return f"{parts[1]}:{parts[2]}"
+    return base
+
+
 def _max_overlap(haystack: str, candidate: str) -> int:
     """Largest k such that haystack ends with candidate[:k]."""
     if not haystack or not candidate:
@@ -114,6 +149,8 @@ def _max_overlap(haystack: str, candidate: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Clean a VTT into readable text.")
     parser.add_argument("vtt", type=Path, help="Path to .vtt file")
+    parser.add_argument("--with-timestamps", action="store_true",
+                        help="Emit one line per cue prefixed with [HH:MM:SS] (or [MM:SS])")
     parser.add_argument("--json", action="store_true", help="Emit cues as JSON to stderr")
     args = parser.parse_args()
 
@@ -122,8 +159,10 @@ def main() -> int:
         return 1
 
     cues = parse_cues(args.vtt)
-    text = merge_cues(cues)
-    print(text)
+    if args.with_timestamps:
+        print(merge_cues_with_timestamps(cues))
+    else:
+        print(merge_cues(cues))
     if args.json:
         json.dump(cues, sys.stderr, ensure_ascii=False, indent=2)
     return 0

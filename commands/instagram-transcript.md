@@ -27,4 +27,4 @@ The user wants to extract a transcript from an Instagram URL. Thin alias for the
 
 5. If they pick a level, generate the summary in the language of the transcript.
 
-For private accounts or login-gated content, see the troubleshooting section in `$HOME/.claude/skills/video-transcript/references/troubleshooting.md` (uses browser cookies via `--cookies-from-browser`). To save in vault add `--note`. Use `--lang es` for Spanish-only content if Whisper auto-detection misfires.
+For private accounts or login-gated content, see the troubleshooting section in `$HOME/.claude/skills/video-transcript/references/troubleshooting.md` (uses browser cookies via `--cookies-from-browser`). To save in vault add `--note`. Use `--lang es` for Spanish-only content if Whisper auto-detection misfires. For per-segment timestamps add `--timestamps`.

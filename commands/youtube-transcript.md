@@ -29,4 +29,4 @@ The user wants to extract a transcript from a YouTube URL. This is a thin alias 
 
 5. If they pick a level, generate the summary in the language of the transcript.
 
-If the user explicitly wants to save in their vault, re-run with `--note`. If auto-captions look bad, re-run with `--force-audio`. See `$HOME/.claude/skills/video-transcript/SKILL.md` for full documentation.
+If the user explicitly wants to save in their vault, re-run with `--note`. If auto-captions look bad (mangled words, brand names misspelled), re-run with `--force-audio` for cleaner Whisper output. For per-segment timestamps in the body, add `--timestamps`. See `$HOME/.claude/skills/video-transcript/SKILL.md` for full documentation, including the section on detecting broken auto-captions.

@@ -8,7 +8,7 @@
 #   4) Build markdown with YAML frontmatter via build_note.py
 #
 # Usage:
-#   transcribe.sh <url> [--note] [--force-audio] [--lang LANG] [--vault-dir DIR]
+#   transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG] [--vault-dir DIR]
 #
 # Output:
 #   /tmp/transcripts/<id>/transcript.md  (always)
@@ -24,6 +24,7 @@ VAULT_DIR_DEFAULT="${HOME}/Documents/Vault"
 URL=""
 WRITE_NOTE=0
 FORCE_AUDIO=0
+WITH_TIMESTAMPS=0
 LANG_HINT=""
 VAULT_DIR="${YT_TRANSCRIPT_VAULT:-$VAULT_DIR_DEFAULT}"
 
@@ -31,10 +32,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --note) WRITE_NOTE=1; shift ;;
     --force-audio) FORCE_AUDIO=1; shift ;;
+    --timestamps) WITH_TIMESTAMPS=1; shift ;;
     --lang) LANG_HINT="$2"; shift 2 ;;
     --vault-dir) VAULT_DIR="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,16p' "$0"; exit 0 ;;
+      sed -n '2,17p' "$0"; exit 0 ;;
     --) shift; URL="$1"; shift ;;
     -*)
       echo "Unknown flag: $1" >&2; exit 2 ;;
@@ -47,7 +49,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$URL" ]]; then
-  echo "Usage: transcribe.sh <url> [--note] [--force-audio] [--lang LANG] [--vault-dir DIR]" >&2
+  echo "Usage: transcribe.sh <url> [--note] [--force-audio] [--timestamps] [--lang LANG] [--vault-dir DIR]" >&2
   exit 2
 fi
 
@@ -108,7 +110,11 @@ else
     PATH_USED="captions"
     # detect language from filename: cap.<lang>.vtt
     LANG_USED=$(basename "$VTT_FILE" | sed -E 's/^cap\.//; s/\.vtt$//')
-    python3 "$SCRIPT_DIR/vtt_to_text.py" "$VTT_FILE" > "$TRANSCRIPT_TXT"
+    if [[ $WITH_TIMESTAMPS -eq 1 ]]; then
+      python3 "$SCRIPT_DIR/vtt_to_text.py" --with-timestamps "$VTT_FILE" > "$TRANSCRIPT_TXT"
+    else
+      python3 "$SCRIPT_DIR/vtt_to_text.py" "$VTT_FILE" > "$TRANSCRIPT_TXT"
+    fi
   else
     log "No captions available (yt-dlp rc=$rc); falling back to audio"
   fi
@@ -136,16 +142,30 @@ if [[ -z "$PATH_USED" ]]; then
     echo "ERROR: mlx_whisper not installed. Run: pipx install mlx-whisper" >&2
     exit 6
   fi
-  WHISPER_ARGS=(--model "mlx-community/whisper-large-v3-mlx" --output-dir "$WORKDIR" --output-format txt)
+  # When timestamps are requested we ask mlx_whisper for VTT (timestamps preserved).
+  # Plain text comes out cleanly without further processing for non-timestamp mode.
+  if [[ $WITH_TIMESTAMPS -eq 1 ]]; then
+    WHISPER_ARGS=(--model "mlx-community/whisper-large-v3-mlx" --output-dir "$WORKDIR" --output-format vtt)
+  else
+    WHISPER_ARGS=(--model "mlx-community/whisper-large-v3-mlx" --output-dir "$WORKDIR" --output-format txt)
+  fi
   if [[ -n "$LANG_HINT" ]]; then WHISPER_ARGS+=(--language "$LANG_HINT"); fi
   mlx_whisper "${WHISPER_ARGS[@]}" "$AUDIO_FILE" >&2
-  # mlx_whisper writes <basename>.txt next to output-dir
-  WHISPER_TXT=$(ls -1 "$WORKDIR"/audio*.txt 2>/dev/null | head -1 || true)
-  if [[ -z "$WHISPER_TXT" ]]; then
-    echo "ERROR: mlx_whisper did not produce a .txt output" >&2
-    exit 6
+  if [[ $WITH_TIMESTAMPS -eq 1 ]]; then
+    WHISPER_VTT=$(ls -1 "$WORKDIR"/audio*.vtt 2>/dev/null | head -1 || true)
+    if [[ -z "$WHISPER_VTT" ]]; then
+      echo "ERROR: mlx_whisper did not produce a .vtt output" >&2
+      exit 6
+    fi
+    python3 "$SCRIPT_DIR/vtt_to_text.py" --with-timestamps "$WHISPER_VTT" > "$TRANSCRIPT_TXT"
+  else
+    WHISPER_TXT=$(ls -1 "$WORKDIR"/audio*.txt 2>/dev/null | head -1 || true)
+    if [[ -z "$WHISPER_TXT" ]]; then
+      echo "ERROR: mlx_whisper did not produce a .txt output" >&2
+      exit 6
+    fi
+    cp "$WHISPER_TXT" "$TRANSCRIPT_TXT"
   fi
-  cp "$WHISPER_TXT" "$TRANSCRIPT_TXT"
   PATH_USED="audio"
   LANG_USED="${LANG_HINT:-auto}"
 fi

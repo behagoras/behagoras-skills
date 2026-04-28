@@ -45,6 +45,9 @@ bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --for
 
 # Hint the language (helps Whisper for short Spanish reels that auto-detect wrongly)
 bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --lang es
+
+# Include per-segment timestamps in the transcript body
+bash "$HOME/.claude/skills/video-transcript/scripts/transcribe.sh" "<URL>" --timestamps
 ```
 
 ## How the script picks a path
@@ -55,6 +58,14 @@ URL → metadata probe → has captions? ─── yes ──→ download VTT, c
 ```
 
 Captions path is always preferred when available — it's instant and accurate to the source. The audio path is the safety net for Reels, TikToks, and Shorts that don't carry captions.
+
+### When YouTube auto-captions look broken
+
+YouTube's auto-captions occasionally mangle proper nouns and brand names (we've seen "Claude" come back as "clo" / "cloud", and similar ASR misfires for less-common terms). After running the captions path, scan the transcript for obvious ASR garbage — short fragments like "clo", "ut", "wo" surrounded by normal text, or a brand name the video is clearly *about* showing up wrong. If you see signs of this, **proactively suggest re-running with `--force-audio`** in your reply, e.g.:
+
+> *"Note: the auto-captions look unreliable — words like 'Claude' came through as 'clo'. Want me to re-run with `--force-audio` for a cleaner Whisper transcription?"*
+
+Don't silently accept garbled captions. The user almost always prefers the higher-quality audio path once they know the option exists.
 
 ## After the transcript exists — the summary protocol
 
@@ -146,6 +157,15 @@ User (after seeing a poor auto-generated transcript): "Hazlo de nuevo pero con a
 Steps:
 1. Run `transcribe.sh "<url>" --force-audio --lang es`
 2. Same flow as before with the new (better) transcript
+
+### Example 5 — User wants timestamps
+
+User: "Sácame la transcripción con timestamps de https://youtu.be/abc"
+
+Steps:
+1. Run `transcribe.sh "<url>" --timestamps`
+2. The transcript body will be one line per cue prefixed with `[MM:SS]` (or `[HH:MM:SS]` for long videos). Show inline if short, or describe the format and link to the full file if long.
+3. Continue with the summary question.
 
 ## Why these decisions
 

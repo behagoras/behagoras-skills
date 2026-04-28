@@ -15,14 +15,31 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      # Wait briefly and re-fetch labels via API rather than using the event
+      # payload. When auto-merge fires the moment a PR opens, the merge
+      # event can beat the auto-label workflow — the payload arrives with no
+      # release:* label, even though the label gets applied seconds later.
+      # Polling the API after a short delay reads the *current* state.
+      - name: Fetch current PR labels (post auto-label race)
+        id: fetch-labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          sleep 10
+          labels=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | join(",")')
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+          echo "Fetched labels: $labels"
+
       - name: Decide bump from PR labels
         id: bump
         env:
-          LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+          LABELS_CSV: ${{ steps.fetch-labels.outputs.labels }}
         run: |
           set -euo pipefail
-          # Extract label names (one per line)
-          labels=$(printf '%s' "$LABELS_JSON" | jq -r '.[].name')
+          # Comma-split into one label per line for grep -x
+          labels=$(printf '%s' "$LABELS_CSV" | tr ',' '\n')
           echo "Labels on PR:"
           printf '%s\n' "$labels"
 

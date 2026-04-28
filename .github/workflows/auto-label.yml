@@ -1,0 +1,25 @@
+name: Auto-label PRs
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add release:patch if no release label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if echo "$LABELS_JSON" | grep -qE '"release:(patch|minor|major)"|"skip-release"'; then
+            echo "PR already has a release label; skipping."
+            exit 0
+          fi
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --add-label release:patch

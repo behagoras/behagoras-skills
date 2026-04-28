@@ -1,6 +1,6 @@
 {
   "name": "behagoras-skills",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Claude Code skills installer — npx behagoras-skills install",
   "license": "MIT",
   "author": "behagoras",

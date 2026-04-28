@@ -138,6 +138,22 @@ done
 
 </details>
 
+## Releasing
+
+Releases are automated by `.github/workflows/release.yml`. To ship a new version:
+
+1. Open a PR.
+2. Add **one** of these labels to the PR:
+   - `release:patch` — bug fixes (0.0.x)
+   - `release:minor` — new features, backwards-compatible (0.x.0)
+   - `release:major` — breaking changes (x.0.0)
+   - `skip-release` (or no release label) — no publish; the workflow no-ops
+3. Merge the PR.
+
+The workflow bumps `package.json`, pushes the version commit + tag, publishes to npm, creates a GitHub Release with auto-generated notes, and smoke-tests `npx behagoras-skills@<new-version> --version`.
+
+If the smoke test fails or you need to roll back, contact npm support — `npm unpublish` is restricted to versions <72 hours old and may break downstream installs.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).

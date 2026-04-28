@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: Publish to npm and create GitHub Release
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide bump from PR labels
+        id: bump
+        env:
+          LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+        run: |
+          set -euo pipefail
+          # Extract label names (one per line)
+          labels=$(printf '%s' "$LABELS_JSON" | jq -r '.[].name')
+          echo "Labels on PR:"
+          printf '%s\n' "$labels"
+
+          bump=""
+          # Priority order: major > minor > patch. Anything else (or nothing) → skip.
+          if printf '%s\n' "$labels" | grep -qx 'release:major'; then
+            bump=major
+          elif printf '%s\n' "$labels" | grep -qx 'release:minor'; then
+            bump=minor
+          elif printf '%s\n' "$labels" | grep -qx 'release:patch'; then
+            bump=patch
+          fi
+
+          if [ -z "$bump" ]; then
+            echo "No release:* label present — skipping publish."
+            echo "bump=skip" >> "$GITHUB_OUTPUT"
+          else
+            echo "Selected bump: $bump"
+            echo "bump=$bump" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.bump.outputs.bump != 'skip'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Default GITHUB_TOKEN is fine because we set contents: write above.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup pnpm
+        if: steps.bump.outputs.bump != 'skip'
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        if: steps.bump.outputs.bump != 'skip'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.bump.outputs.bump != 'skip'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: steps.bump.outputs.bump != 'skip'
+        run: pnpm build
+
+      - name: Configure git identity
+        if: steps.bump.outputs.bump != 'skip'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Bump version
+        if: steps.bump.outputs.bump != 'skip'
+        id: version
+        run: |
+          set -euo pipefail
+          # `npm version` prints the new tag (e.g. v0.0.2) to stdout and creates
+          # a commit + annotated tag in one shot.
+          new_tag=$(npm version "${{ steps.bump.outputs.bump }}" -m "chore(release): %s")
+          new_version="${new_tag#v}"
+          echo "tag=$new_tag" >> "$GITHUB_OUTPUT"
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "Bumped to $new_tag"
+
+      - name: Push commit and tag
+        if: steps.bump.outputs.bump != 'skip'
+        run: git push origin HEAD:main --follow-tags
+
+      - name: Publish to npm
+        if: steps.bump.outputs.bump != 'skip'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --no-git-checks
+
+      - name: Create GitHub Release
+        if: steps.bump.outputs.bump != 'skip'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ steps.version.outputs.tag }}" --generate-notes
+
+      - name: Smoke test published package
+        if: steps.bump.outputs.bump != 'skip'
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          # Run from a clean directory so npx fetches from the registry instead
+          # of resolving to the workspace.
+          tmpdir=$(mktemp -d)
+          cd "$tmpdir"
+
+          # Retry to absorb registry propagation delay. Backoff: 10s, 20s, 30s
+          # (capped at 60s total wait), 4 attempts.
+          attempt=1
+          max_attempts=4
+          delay=10
+          actual=""
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "Smoke test attempt $attempt/$max_attempts (waiting ${delay}s for registry)..."
+            sleep "$delay"
+            if actual=$(npx -y "behagoras-skills@${version}" --version 2>/dev/null); then
+              actual=$(printf '%s' "$actual" | tr -d '[:space:]')
+              if [ "$actual" = "$version" ]; then
+                echo "Smoke test passed: --version reports $actual"
+                exit 0
+              fi
+              echo "Got '$actual', expected '$version' — retrying."
+            else
+              echo "npx invocation failed — retrying."
+            fi
+            attempt=$((attempt + 1))
+            delay=$((delay + 10))
+          done
+
+          echo "::error::Smoke test failed after $max_attempts attempts. Last output: '$actual'"
+          echo "Recovery: contact npm support to unpublish (only allowed <72h after publish)."
+          exit 1

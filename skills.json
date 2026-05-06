@@ -5,47 +5,9 @@
       "name": "b7s-brainstorm",
       "description": "Freestyle brainstorm capture (Mexican Spanish) — listen, organize faithfully, save to .brainstorms/inbox/, deepen via AskUserQuestion.",
       "path": "b7s-brainstorm",
-      "commands": ["b7s-brainstorm"],
-      "requires": {
-        "binaries": []
-      },
-      "prompts": []
-    },
-    {
-      "name": "b7s-create-skill",
-      "description": "Mnemonic shortcut to /skill-creator for creating or improving Claude Code skills.",
-      "path": "b7s-create-skill",
-      "commands": ["b7s-create-skill"],
-      "requires": {
-        "binaries": []
-      },
-      "prompts": []
-    },
-    {
-      "name": "b7s-daily-dump",
-      "description": "Discoverability alias for b7s-brainstorm — triggers on 'daily dump'.",
-      "path": "b7s-daily-dump",
-      "commands": ["b7s-daily-dump"],
-      "requires": {
-        "binaries": []
-      },
-      "prompts": []
-    },
-    {
-      "name": "b7s-info-dump",
-      "description": "Discoverability alias for b7s-brainstorm — triggers on 'info dump'.",
-      "path": "b7s-info-dump",
-      "commands": ["b7s-info-dump"],
-      "requires": {
-        "binaries": []
-      },
-      "prompts": []
-    },
-    {
-      "name": "b7s-lluvia",
-      "description": "Discoverability alias for b7s-brainstorm — triggers on 'lluvia de ideas' (Mexican Spanish).",
-      "path": "b7s-lluvia",
-      "commands": ["b7s-lluvia"],
+      "commands": [
+        "b7s-brainstorm"
+      ],
       "requires": {
         "binaries": []
       },
@@ -55,7 +17,9 @@
       "name": "b7s-prioritize",
       "description": "Rank executable prompts by urgency, dependencies, and TODO coverage — closes the b7s trio (brainstorm → review → prioritize). Read-only.",
       "path": "b7s-prioritize",
-      "commands": ["b7s-prioritize"],
+      "commands": [
+        "b7s-prioritize"
+      ],
       "requires": {
         "binaries": []
       },
@@ -65,7 +29,9 @@
       "name": "b7s-review",
       "description": "Review brainstorm TODOs and move files between statuses (inbox/in-progress/completed/archived). Pairs with b7s-brainstorm.",
       "path": "b7s-review",
-      "commands": ["b7s-review"],
+      "commands": [
+        "b7s-review"
+      ],
       "requires": {
         "binaries": []
       },
@@ -82,16 +48,24 @@
         "video-transcript"
       ],
       "requires": {
-        "binaries": ["yt-dlp", "ffmpeg", "python3"],
+        "binaries": [
+          "yt-dlp",
+          "ffmpeg",
+          "python3"
+        ],
         "optional": [
           {
             "binary": "mlx_whisper",
-            "platforms": ["darwin"],
+            "platforms": [
+              "darwin"
+            ],
             "install": "pipx install mlx-whisper"
           },
           {
             "binary": "whisper-ctranslate2",
-            "platforms": ["linux"],
+            "platforms": [
+              "linux"
+            ],
             "install": "pipx install whisper-ctranslate2"
           }
         ]
@@ -102,27 +76,48 @@
           "question": "Where should --note save vault notes? (relative paths anchor to .transcriptsrc location)",
           "type": "select",
           "choices": [
-            { "label": "./.transcripts (per-project, gitignored)", "value": "./.transcripts" },
-            { "label": "./spider (matches the spider-openclaw-server pattern)", "value": "./spider" },
-            { "label": "<obsidian-autodetect>", "value": "<obsidian-autodetect>" },
-            { "label": "Custom path…", "value": "<custom>" }
+            {
+              "label": "./.transcripts (per-project, gitignored)",
+              "value": "./.transcripts"
+            },
+            {
+              "label": "./spider (matches the spider-openclaw-server pattern)",
+              "value": "./spider"
+            },
+            {
+              "label": "<obsidian-autodetect>",
+              "value": "<obsidian-autodetect>"
+            },
+            {
+              "label": "Custom path…",
+              "value": "<custom>"
+            }
           ],
           "default": "./.transcripts",
-          "writes": { "file": ".transcriptsrc", "key": "vault_dir" }
+          "writes": {
+            "file": ".transcriptsrc",
+            "key": "vault_dir"
+          }
         },
         {
           "key": "default_with_timestamps",
           "question": "Always emit per-cue timestamps?",
           "type": "confirm",
           "default": false,
-          "writes": { "file": ".transcriptsrc", "key": "default_with_timestamps" }
+          "writes": {
+            "file": ".transcriptsrc",
+            "key": "default_with_timestamps"
+          }
         },
         {
           "key": "default_force_audio",
           "question": "Always skip captions and use Whisper audio path?",
           "type": "confirm",
           "default": false,
-          "writes": { "file": ".transcriptsrc", "key": "default_force_audio" }
+          "writes": {
+            "file": ".transcriptsrc",
+            "key": "default_force_audio"
+          }
         }
       ]
     }

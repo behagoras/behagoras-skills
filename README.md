@@ -15,6 +15,8 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 | [`b7s-brainstorm`](./b7s-brainstorm/README.md) — freestyle brainstorm capture (Mexican Spanish), saves to `.brainstorms/inbox/` | `npx behagoras-skills install b7s-brainstorm` |
 | [`b7s-review`](./b7s-review/README.md) — review brainstorm TODOs and move files between status folders | `npx behagoras-skills install b7s-review` |
 | [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage | `npx behagoras-skills install b7s-prioritize` |
+| [`b7s-ask`](./b7s-ask/README.md) — re-ask plain-text questions via the structured `AskUserQuestion` UI | `npx behagoras-skills install b7s-ask` |
+| [`b7s-create-skill`](./b7s-create-skill/README.md) — scaffold + iterate new skills inside this repo using the `skill-creator` loop, then commit and open a PR | `npx behagoras-skills install b7s-create-skill` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
 
 ### The `b7s` trio
@@ -39,6 +41,8 @@ Skill bodies are authored in **Mexican Spanish**; the public surface (this READM
 | [`/b7s-brainstorm [topic]`](./commands/b7s-brainstorm.md) | Freestyle brainstorm capture (Spanish) |
 | [`/b7s-review [date]`](./commands/b7s-review.md) | Review brainstorm TODOs and shuffle file statuses |
 | [`/b7s-prioritize [N\|slug]`](./commands/b7s-prioritize.md) | Rank executable prompts by urgency, deps, and TODO coverage |
+| [`/b7s-ask [topic]`](./commands/b7s-ask.md) | Re-ask Claude's recent plain-text questions via the structured `AskUserQuestion` UI |
+| [`/b7s-create-skill [name]`](./commands/b7s-create-skill.md) | Scaffold a new skill inside this repo using the `skill-creator` loop, commit, and open a PR |
 | [`/youtube-transcript <url>`](./commands/youtube-transcript.md) | YouTube videos, Shorts, and live URLs |
 | [`/instagram-transcript <url>`](./commands/instagram-transcript.md) | Instagram Reels and posts |
 | [`/tiktok-transcript <url>`](./commands/tiktok-transcript.md) | TikTok videos |

@@ -13,11 +13,24 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 | Skill | One-liner install |
 |---|---|
 | [`b7s-brainstorm`](./b7s-brainstorm/README.md) — freestyle brainstorm capture (Mexican Spanish), saves to `.brainstorms/inbox/` | `npx behagoras-skills install b7s-brainstorm` |
-| [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage (closes the b7s trio) | `npx behagoras-skills install b7s-prioritize` |
 | [`b7s-review`](./b7s-review/README.md) — review brainstorm TODOs and move files between status folders | `npx behagoras-skills install b7s-review` |
+| [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage | `npx behagoras-skills install b7s-prioritize` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
 
-> The `b7s-*` skills are personal-use skills authored in Mexican Spanish; their `SKILL.md` bodies stay in Spanish even though the README and CLI surface remain in English.
+### The `b7s` trio
+
+`b7s-brainstorm`, `b7s-review`, and `b7s-prioritize` are designed as a single workflow — three skills that close the loop between **capturing ideas** and **deciding what to act on next**:
+
+```
+b7s-brainstorm ──▶ b7s-review ──▶ b7s-prioritize
+   (capture)        (triage)         (decide)
+```
+
+1. **Capture.** `b7s-brainstorm` listens to a freestyle dump, organizes it faithfully (no editorializing), and saves the result to `.brainstorms/inbox/{YYYY-MM-DD}.md`.
+2. **Triage.** `b7s-review` walks each TODO from those dumps, lets you mark status (`done`, `doing`, `snoozed`, `cancelled`), and moves files between `inbox/ → in-progress/ → completed/ → archived/`. Pairs each live TODO with an executable prompt when applicable.
+3. **Decide.** `b7s-prioritize` scores those prompts by urgency, dependency readiness, and TODO coverage, then ranks the next 3-5 to run. Read-only — no file edits.
+
+Skill bodies are authored in **Mexican Spanish**; the public surface (this README, `skills.json`, CLI output) stays in English. Install the trio together for the full flow, or pick one if it fits your existing setup.
 
 ## Slash commands
 

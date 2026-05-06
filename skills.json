@@ -2,11 +2,35 @@
   "$schema": "./skills.schema.json",
   "skills": [
     {
+      "name": "b7s-ask",
+      "description": "Re-ask the questions Claude just posed in plain text via the structured AskUserQuestion UI — synthesizes 2-4 options per question from the conversation context. Spanish-default, English when the conversation is in English.",
+      "path": "b7s-ask",
+      "commands": [
+        "b7s-ask"
+      ],
+      "requires": {
+        "binaries": []
+      },
+      "prompts": []
+    },
+    {
       "name": "b7s-brainstorm",
       "description": "Freestyle brainstorm capture (Mexican Spanish) — listen, organize faithfully, save to .brainstorms/inbox/, deepen via AskUserQuestion.",
       "path": "b7s-brainstorm",
       "commands": [
         "b7s-brainstorm"
+      ],
+      "requires": {
+        "binaries": []
+      },
+      "prompts": []
+    },
+    {
+      "name": "b7s-create-skill",
+      "description": "Scaffold and iterate new skills inside the local behagoras-skills clone using the skill-creator methodology — runs the full interview/draft/eval loop, updates skills.json + commands + README + package.json, validates the manifest, runs pnpm lint, commits atomically, and opens a PR with the chosen release label.",
+      "path": "b7s-create-skill",
+      "commands": [
+        "b7s-create-skill"
       ],
       "requires": {
         "binaries": []

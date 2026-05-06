@@ -12,14 +12,26 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 
 | Skill | One-liner install |
 |---|---|
+| [`b7s-brainstorm`](./b7s-brainstorm/README.md) — freestyle brainstorm capture (Mexican Spanish), saves to `.brainstorms/inbox/` | `npx behagoras-skills install b7s-brainstorm` |
+| [`b7s-create-skill`](./b7s-create-skill/README.md) — mnemonic shortcut to `/skill-creator` | `npx behagoras-skills install b7s-create-skill` |
+| [`b7s-daily-dump`](./b7s-daily-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-daily-dump` |
+| [`b7s-info-dump`](./b7s-info-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-info-dump` |
+| [`b7s-lluvia`](./b7s-lluvia/README.md) — discoverability alias for `b7s-brainstorm` (Spanish phrasing) | `npx behagoras-skills install b7s-lluvia` |
+| [`b7s-review`](./b7s-review/README.md) — review brainstorm TODOs and move files between status folders | `npx behagoras-skills install b7s-review` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
+
+> The `b7s-*` skills are personal-use skills authored in Mexican Spanish; their `SKILL.md` bodies stay in Spanish even though the README and CLI surface remain in English.
 
 ## Slash commands
 
-Discoverability aliases that all delegate to the `video-transcript` skill — they differ only in the URL validation they apply.
-
 | Command | Use for |
 |---|---|
+| [`/b7s-brainstorm [topic]`](./commands/b7s-brainstorm.md) | Freestyle brainstorm capture (Spanish) |
+| [`/b7s-review [date]`](./commands/b7s-review.md) | Review brainstorm TODOs and shuffle file statuses |
+| [`/b7s-lluvia [topic]`](./commands/b7s-lluvia.md) | Alias of `/b7s-brainstorm` — triggers on "lluvia" |
+| [`/b7s-daily-dump [topic]`](./commands/b7s-daily-dump.md) | Alias of `/b7s-brainstorm` — triggers on "daily dump" |
+| [`/b7s-info-dump [topic]`](./commands/b7s-info-dump.md) | Alias of `/b7s-brainstorm` — triggers on "info dump" |
+| [`/b7s-create-skill [desc]`](./commands/b7s-create-skill.md) | Mnemonic shortcut to `/skill-creator` |
 | [`/youtube-transcript <url>`](./commands/youtube-transcript.md) | YouTube videos, Shorts, and live URLs |
 | [`/instagram-transcript <url>`](./commands/instagram-transcript.md) | Instagram Reels and posts |
 | [`/tiktok-transcript <url>`](./commands/tiktok-transcript.md) | TikTok videos |

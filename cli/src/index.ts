@@ -40,17 +40,17 @@ async function main(argv: string[]): Promise<number> {
     .version(pkgVersion, '-v, --version', 'print the CLI version')
     .addHelpText(
       'after',
-      `\nExamples:\n  $ npx behagoras-skills install\n  $ npx behagoras-skills install video-transcript\n  $ npx behagoras-skills doctor\n`
+      `\nExamples:\n  $ npx behagoras-skills install\n  $ npx behagoras-skills install video-transcript\n  $ npx behagoras-skills install b7s-brainstorm b7s-review\n  $ npx behagoras-skills doctor\n`
     );
 
-  // install [skill]
+  // install [skills...]
   commonOptions(
     program
       .command('install')
-      .description('install one or more skills (interactive when [skill] is omitted)')
-      .argument('[skill]', 'skill name (e.g. video-transcript)')
-      .action(async (skill: string | undefined, options: CommonFlags) => {
-        const code = await runInstall(skill, options);
+      .description('install one or more skills (interactive when [skills...] is omitted)')
+      .argument('[skills...]', 'skill names (e.g. video-transcript b7s-brainstorm)')
+      .action(async (skills: string[], options: CommonFlags) => {
+        const code = await runInstall(skills, options);
         process.exitCode = code;
       }),
     /* includeForce */ true

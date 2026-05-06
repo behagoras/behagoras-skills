@@ -16,21 +16,33 @@ export interface InstallOptions {
   force?: boolean;
 }
 
-export async function runInstall(skillName: string | undefined, opts: InstallOptions = {}): Promise<number> {
+export async function runInstall(
+  skillNames: string | string[] | undefined,
+  opts: InstallOptions = {}
+): Promise<number> {
   const repoRoot = await resolveRepoRoot(opts.repoRoot);
   const manifest = await loadManifest(repoRoot);
   const scope = opts.scope ?? 'global';
   const paths = claudePaths(scope);
 
-  const targets = await selectSkills(manifest, skillName, opts);
+  // Normalize: accept legacy single-string, current variadic array, or undefined.
+  const requested: string[] | undefined = skillNames === undefined
+    ? undefined
+    : Array.isArray(skillNames)
+      ? skillNames
+      : [skillNames];
+
+  const targets = await selectSkills(manifest, requested, opts);
   if (targets.length === 0) {
     console.log(kleur.yellow('Nothing selected — exiting.'));
     return 0;
   }
 
+  const succeeded: string[] = [];
   let exitCode = 0;
   for (const skill of targets) {
     console.log(kleur.bold().cyan(`\n→ ${skill.name}`));
+    let skillOk = true;
 
     // (a) ensure ~/.claude/skills + ~/.claude/commands
     // ensureSymlink will mkdir parent on first link, but make these explicit so
@@ -46,6 +58,7 @@ export async function runInstall(skillName: string | undefined, opts: InstallOpt
     logSymlinkResult(r);
     if (r.status === 'conflict-file' || r.status === 'conflict-dir' || r.status === 'diverged') {
       exitCode = 1;
+      skillOk = false;
     }
 
     for (const cmd of skill.commands) {
@@ -55,6 +68,7 @@ export async function runInstall(skillName: string | undefined, opts: InstallOpt
       logSymlinkResult(cr);
       if (cr.status === 'conflict-file' || cr.status === 'conflict-dir' || cr.status === 'diverged') {
         exitCode = 1;
+        skillOk = false;
       }
     }
 
@@ -63,6 +77,15 @@ export async function runInstall(skillName: string | undefined, opts: InstallOpt
       const answers = await runPrompts(skill.prompts, { yes: opts.yes });
       await writeAnswersToRcFiles(skill, answers, { force: opts.force });
     }
+
+    if (skillOk) succeeded.push(skill.name);
+  }
+
+  if (targets.length > 1) {
+    console.log(
+      kleur.bold(`\nInstalled ${succeeded.length}/${targets.length}: `) +
+        (succeeded.length > 0 ? kleur.green(succeeded.join(', ')) : kleur.dim('(none)'))
+    );
   }
 
   // (d) doctor summary
@@ -76,15 +99,28 @@ export async function runInstall(skillName: string | undefined, opts: InstallOpt
 
 async function selectSkills(
   manifest: Manifest,
-  skillName: string | undefined,
+  skillNames: string[] | undefined,
   opts: InstallOptions
 ): Promise<Skill[]> {
-  if (skillName) {
-    const skill = manifest.skills.find((s) => s.name === skillName);
-    if (!skill) {
-      throw new Error(`Unknown skill: ${skillName}. Run \`list\` to see available skills.`);
+  if (skillNames && skillNames.length > 0) {
+    // Validate all names upfront so a typo on the 3rd name doesn't leave the
+    // first two installed in a partial state.
+    const unknown = skillNames.filter((n) => !manifest.skills.some((s) => s.name === n));
+    if (unknown.length > 0) {
+      throw new Error(
+        `Unknown skill${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}. Run \`list\` to see available skills.`
+      );
     }
-    return [skill];
+    // Preserve the order the user requested, dedupe.
+    const seen = new Set<string>();
+    const ordered: Skill[] = [];
+    for (const n of skillNames) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      const s = manifest.skills.find((m) => m.name === n);
+      if (s) ordered.push(s);
+    }
+    return ordered;
   }
   if (opts.yes) {
     // --yes with no specific skill → install everything.

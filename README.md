@@ -45,7 +45,7 @@ $ npx behagoras-skills <subcommand>
 
 | Subcommand | What it does |
 |---|---|
-| `install [skill]` | Install one skill, or all selected via an interactive checkbox menu when no name is given. Idempotent. |
+| `install [skills...]` | Install one or more named skills (e.g. `install b7s-brainstorm b7s-review`), or pick from an interactive checkbox menu when no name is given. Idempotent. |
 | `list` | Print every skill and its installation status (`installed`, `not installed`, `broken-symlink`, `installed-elsewhere`). |
 | `uninstall <skill>` | Remove the symlinks created by install. Leaves your clone, `.transcriptsrc`, and skill folder alone. |
 | `doctor` | Verify required binaries and symlinks for installed skills. Exits 0 when all hard requirements pass. |

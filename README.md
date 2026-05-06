@@ -105,10 +105,12 @@ The audio path uses `mlx_whisper` with the `large-v3` model. First audio-path ru
 ## Updating
 
 ```bash
-npx behagoras-skills update              # incremental sync (default)
-npx behagoras-skills update --prune      # also remove symlinks for commands no longer in the manifest
-npx behagoras-skills update --clean      # destructive: uninstall+reinstall (rare)
+npx behagoras-skills@latest update --prune   # recommended — sync + drop removed skills/commands
+npx behagoras-skills update                  # incremental sync (default — keeps stale symlinks)
+npx behagoras-skills update --clean          # destructive: uninstall+reinstall (rare)
 ```
+
+**`--prune` is the right default after a release that removes skills.** Without it, symlinks for skills/commands that no longer exist in `skills.json` stay on your filesystem pointing at deleted files. The `0.1.4` release in particular dropped four `b7s-*` aliases (`b7s-lluvia`, `b7s-daily-dump`, `b7s-info-dump`, `b7s-create-skill`); running `update --prune` cleans them out cleanly.
 
 The default mode is non-destructive: existing `.transcriptsrc` keys are preserved verbatim, divergent symlinks (e.g. left over from a previous npx tmp install) get re-pointed at the current location, and newly-declared commands or rcfile keys are added. Use `--clean` only when a normal update fails or you're migrating to a different scope.
 

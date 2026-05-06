@@ -17,6 +17,7 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 | [`b7s-daily-dump`](./b7s-daily-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-daily-dump` |
 | [`b7s-info-dump`](./b7s-info-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-info-dump` |
 | [`b7s-lluvia`](./b7s-lluvia/README.md) — discoverability alias for `b7s-brainstorm` (Spanish phrasing) | `npx behagoras-skills install b7s-lluvia` |
+| [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage (closes the b7s trio) | `npx behagoras-skills install b7s-prioritize` |
 | [`b7s-review`](./b7s-review/README.md) — review brainstorm TODOs and move files between status folders | `npx behagoras-skills install b7s-review` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
 
@@ -28,6 +29,7 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 |---|---|
 | [`/b7s-brainstorm [topic]`](./commands/b7s-brainstorm.md) | Freestyle brainstorm capture (Spanish) |
 | [`/b7s-review [date]`](./commands/b7s-review.md) | Review brainstorm TODOs and shuffle file statuses |
+| [`/b7s-prioritize [N\|slug]`](./commands/b7s-prioritize.md) | Rank executable prompts by urgency, deps, and TODO coverage |
 | [`/b7s-lluvia [topic]`](./commands/b7s-lluvia.md) | Alias of `/b7s-brainstorm` — triggers on "lluvia" |
 | [`/b7s-daily-dump [topic]`](./commands/b7s-daily-dump.md) | Alias of `/b7s-brainstorm` — triggers on "daily dump" |
 | [`/b7s-info-dump [topic]`](./commands/b7s-info-dump.md) | Alias of `/b7s-brainstorm` — triggers on "info dump" |

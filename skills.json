@@ -52,6 +52,16 @@
       "prompts": []
     },
     {
+      "name": "b7s-prioritize",
+      "description": "Rank executable prompts by urgency, dependencies, and TODO coverage — closes the b7s trio (brainstorm → review → prioritize). Read-only.",
+      "path": "b7s-prioritize",
+      "commands": ["b7s-prioritize"],
+      "requires": {
+        "binaries": []
+      },
+      "prompts": []
+    },
+    {
       "name": "b7s-review",
       "description": "Review brainstorm TODOs and move files between statuses (inbox/in-progress/completed/archived). Pairs with b7s-brainstorm.",
       "path": "b7s-review",

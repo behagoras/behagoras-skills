@@ -13,15 +13,24 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 | Skill | One-liner install |
 |---|---|
 | [`b7s-brainstorm`](./b7s-brainstorm/README.md) — freestyle brainstorm capture (Mexican Spanish), saves to `.brainstorms/inbox/` | `npx behagoras-skills install b7s-brainstorm` |
-| [`b7s-create-skill`](./b7s-create-skill/README.md) — mnemonic shortcut to `/skill-creator` | `npx behagoras-skills install b7s-create-skill` |
-| [`b7s-daily-dump`](./b7s-daily-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-daily-dump` |
-| [`b7s-info-dump`](./b7s-info-dump/README.md) — discoverability alias for `b7s-brainstorm` | `npx behagoras-skills install b7s-info-dump` |
-| [`b7s-lluvia`](./b7s-lluvia/README.md) — discoverability alias for `b7s-brainstorm` (Spanish phrasing) | `npx behagoras-skills install b7s-lluvia` |
-| [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage (closes the b7s trio) | `npx behagoras-skills install b7s-prioritize` |
 | [`b7s-review`](./b7s-review/README.md) — review brainstorm TODOs and move files between status folders | `npx behagoras-skills install b7s-review` |
+| [`b7s-prioritize`](./b7s-prioritize/README.md) — rank executable prompts by urgency, deps, and TODO coverage | `npx behagoras-skills install b7s-prioritize` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
 
-> The `b7s-*` skills are personal-use skills authored in Mexican Spanish; their `SKILL.md` bodies stay in Spanish even though the README and CLI surface remain in English.
+### The `b7s` trio
+
+`b7s-brainstorm`, `b7s-review`, and `b7s-prioritize` are designed as a single workflow — three skills that close the loop between **capturing ideas** and **deciding what to act on next**:
+
+```
+b7s-brainstorm ──▶ b7s-review ──▶ b7s-prioritize
+   (capture)        (triage)         (decide)
+```
+
+1. **Capture.** `b7s-brainstorm` listens to a freestyle dump, organizes it faithfully (no editorializing), and saves the result to `.brainstorms/inbox/{YYYY-MM-DD}.md`.
+2. **Triage.** `b7s-review` walks each TODO from those dumps, lets you mark status (`done`, `doing`, `snoozed`, `cancelled`), and moves files between `inbox/ → in-progress/ → completed/ → archived/`. Pairs each live TODO with an executable prompt when applicable.
+3. **Decide.** `b7s-prioritize` scores those prompts by urgency, dependency readiness, and TODO coverage, then ranks the next 3-5 to run. Read-only — no file edits.
+
+Skill bodies are authored in **Mexican Spanish**; the public surface (this README, `skills.json`, CLI output) stays in English. Install the trio together for the full flow, or pick one if it fits your existing setup.
 
 ## Slash commands
 
@@ -30,10 +39,6 @@ That one command symlinks every selected skill (and its slash commands) into `~/
 | [`/b7s-brainstorm [topic]`](./commands/b7s-brainstorm.md) | Freestyle brainstorm capture (Spanish) |
 | [`/b7s-review [date]`](./commands/b7s-review.md) | Review brainstorm TODOs and shuffle file statuses |
 | [`/b7s-prioritize [N\|slug]`](./commands/b7s-prioritize.md) | Rank executable prompts by urgency, deps, and TODO coverage |
-| [`/b7s-lluvia [topic]`](./commands/b7s-lluvia.md) | Alias of `/b7s-brainstorm` — triggers on "lluvia" |
-| [`/b7s-daily-dump [topic]`](./commands/b7s-daily-dump.md) | Alias of `/b7s-brainstorm` — triggers on "daily dump" |
-| [`/b7s-info-dump [topic]`](./commands/b7s-info-dump.md) | Alias of `/b7s-brainstorm` — triggers on "info dump" |
-| [`/b7s-create-skill [desc]`](./commands/b7s-create-skill.md) | Mnemonic shortcut to `/skill-creator` |
 | [`/youtube-transcript <url>`](./commands/youtube-transcript.md) | YouTube videos, Shorts, and live URLs |
 | [`/instagram-transcript <url>`](./commands/instagram-transcript.md) | Instagram Reels and posts |
 | [`/tiktok-transcript <url>`](./commands/tiktok-transcript.md) | TikTok videos |
@@ -100,10 +105,12 @@ The audio path uses `mlx_whisper` with the `large-v3` model. First audio-path ru
 ## Updating
 
 ```bash
-npx behagoras-skills update              # incremental sync (default)
-npx behagoras-skills update --prune      # also remove symlinks for commands no longer in the manifest
-npx behagoras-skills update --clean      # destructive: uninstall+reinstall (rare)
+npx behagoras-skills@latest update --prune   # recommended — sync + drop removed skills/commands
+npx behagoras-skills update                  # incremental sync (default — keeps stale symlinks)
+npx behagoras-skills update --clean          # destructive: uninstall+reinstall (rare)
 ```
+
+**`--prune` is the right default after a release that removes skills.** Without it, symlinks for skills/commands that no longer exist in `skills.json` stay on your filesystem pointing at deleted files. The `0.1.4` release in particular dropped four `b7s-*` aliases (`b7s-lluvia`, `b7s-daily-dump`, `b7s-info-dump`, `b7s-create-skill`); running `update --prune` cleans them out cleanly.
 
 The default mode is non-destructive: existing `.transcriptsrc` keys are preserved verbatim, divergent symlinks (e.g. left over from a previous npx tmp install) get re-pointed at the current location, and newly-declared commands or rcfile keys are added. Use `--clean` only when a normal update fails or you're migrating to a different scope.
 

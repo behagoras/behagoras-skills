@@ -65,9 +65,10 @@ Codex status-line items without data are omitted temporarily by Codex. This is e
 Current limitations remain:
 
 - no custom command-backed renderer
+- no multi-line footer; `tui.status_line` renders as one row
 - no arbitrary ANSI segment rendering
 - no custom 10-character progress bar
 - no built-in cost or duration item
-- rate-limit items show remaining percentage, not used percentage
+- rate-limit items use compact Codex-owned labels such as `5h N%` and `weekly N%`; use `/status` for the authoritative breakdown
 
 If Codex later documents a command-backed status-line hook or adds cost/duration/progress items, this plugin should be updated and this ADR amended or superseded.

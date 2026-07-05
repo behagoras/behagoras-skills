@@ -11,6 +11,8 @@ Usa esta skill cuando el usuario quiera configurar la barra inferior de Codex CL
 
 Codex CLI usa `tui.status_line` en `config.toml`: una lista ordenada de IDs integrados. No asumas que existe un `statusLine` command-backed como en Claude Code.
 
+Codex pinta esa lista como una sola fila inferior. No prometas dos lineas de footer, saltos de linea, barras custom ni columnas arbitrarias hasta que Codex soporte multi-line status lines o un renderer externo. Si el usuario pide dos lineas, explica la limitacion y referencia `docs/codex-statusline/upstream-gap.md`.
+
 El preset recomendado esta en `${PLUGIN_ROOT}/statusline-items.json` y se aplica con:
 
 ```bash
@@ -53,6 +55,8 @@ node "${PLUGIN_ROOT}/scripts/print-codex-statusline-config.mjs"
 
 Tambien puedes pedir al usuario abrir Codex y usar `/statusline`; Codex puede omitir items sin datos disponibles, como PR, limites o task progress.
 
+Los items `five-hour-limit` y `weekly-limit` son snapshots compactos controlados por Codex. Si el porcentaje parece ambiguo, pide comparar con `/status`, que es la vista autoritativa para desglose y resets.
+
 ## Revertir
 
 Usa el backup timestamped creado por el aplicador:
@@ -68,3 +72,4 @@ Si el backup no sigue el patron `config.toml.bak-YYYYMMDD-HHMMSS`, pasa tambien 
 - No configures `statusLine.type = "command"` para Codex CLI.
 - No edites secciones ajenas a `[tui]`.
 - No prometas costo, duracion o barras ANSI custom; Codex no expone esos items en la status line nativa actual.
+- No prometas dos filas de contenido; Codex renderiza `tui.status_line` como una sola fila.

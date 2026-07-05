@@ -144,6 +144,32 @@
           }
         }
       ]
+    },
+    {
+      "name": "orchestrate-personal",
+      "description": "Route work on the personal machine between Claude and Codex for the best quality-price fit across both quotas. Use when David asks to run a task or saved prompt without naming which model, wants work delegated to the background, asks which model should handle something, or when one model's output needs review by the other. Also reached by run-prompt before executing a spec.",
+      "path": "orchestrate-personal",
+      "commands": [
+        "orchestrate-personal"
+      ],
+      "requires": {
+        "binaries": []
+      },
+      "prompts": []
+    },
+    {
+      "name": "orchestrate-work",
+      "description": "Route work-machine tasks between free Gemini and metered Claude to cut Claude token spend. Use when a task needs anything from the web (Claude has no web access on this machine), when delegating analysis, tests, or routine implementation to Gemini as the cheap executor, when deciding how to review or close a Gemini result, or when a Gemini attempt failed and escalation to Claude is in question.",
+      "path": "orchestrate-work",
+      "commands": [
+        "orchestrate-work"
+      ],
+      "requires": {
+        "binaries": [
+          "python3"
+        ]
+      },
+      "prompts": []
     }
   ]
 }

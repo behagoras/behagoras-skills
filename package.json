@@ -31,7 +31,9 @@
     ".transcriptsrc.example",
     "install.sh",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "orchestrate-personal",
+    "orchestrate-work"
   ],
   "engines": {
     "node": ">=18"

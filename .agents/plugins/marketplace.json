@@ -1,0 +1,20 @@
+{
+  "name": "behagoras",
+  "interface": {
+    "displayName": "Behagoras"
+  },
+  "plugins": [
+    {
+      "name": "codex-statusline",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-statusline"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

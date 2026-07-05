@@ -8,7 +8,7 @@ npx behagoras-skills install
 
 That one command symlinks every selected skill (and its slash commands) into `~/.claude/`, walks you through any per-skill configuration, and verifies the system dependencies. Re-running it is a no-op for anything already in place.
 
-## Plugins
+## Claude Code plugins
 
 This repository also acts as a Claude Code plugin marketplace. Skills still use the npm channel above; plugins use Claude Code's native marketplace flow.
 
@@ -21,6 +21,16 @@ This repository also acts as a Claude Code plugin marketplace. Skills still use 
 |---|---|
 | [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline` |
 
+## Codex plugins
+
+This repository also exposes a Codex plugin marketplace at [`.agents/plugins/marketplace.json`](./.agents/plugins/marketplace.json). Codex plugins use Codex CLI's `/plugins` browser and native plugin format.
+
+| Plugin | Use for |
+|---|---|
+| [`codex-statusline`](./plugins/codex-statusline/README.md) — Codex-native `tui.status_line` preset with model, reasoning, context, limits, tokens, git, progress, current directory, and version | Install from `/plugins`, then ask Codex to use `codex-statusline` |
+
+The Codex status-line plugin intentionally does not reuse Claude Code's command-backed `statusLine` API. Codex CLI currently persists ordered built-in footer items to `~/.codex/config.toml` under `[tui].status_line`.
+
 ## Skills
 
 | Skill | One-liner install |
@@ -31,6 +41,8 @@ This repository also acts as a Claude Code plugin marketplace. Skills still use 
 | [`b7s-ask`](./b7s-ask/README.md) — re-ask plain-text questions via the structured `AskUserQuestion` UI | `npx behagoras-skills install b7s-ask` |
 | [`b7s-create-skill`](./b7s-create-skill/README.md) — scaffold + iterate new skills inside this repo using the `skill-creator` loop, then commit and open a PR | `npx behagoras-skills install b7s-create-skill` |
 | [`video-transcript`](./video-transcript/README.md) — extract transcripts from any video URL (YouTube, Reels, TikTok, Vimeo, …) | `npx behagoras-skills install video-transcript` |
+| [`orchestrate-personal`](./orchestrate-personal/README.md) — route tasks between Claude and Codex on the personal machine (quality-price fit, quota balancing) | `npx behagoras-skills install orchestrate-personal` |
+| [`orchestrate-work`](./orchestrate-work/README.md) — Gemini-default routing on the work machine; logs Claude tokens saved | `npx behagoras-skills install orchestrate-work` |
 
 ### The `b7s` trio
 
@@ -56,6 +68,8 @@ Skill bodies are authored in **Mexican Spanish**; the public surface (this READM
 | [`/b7s-prioritize [N\|slug]`](./commands/b7s-prioritize.md) | Rank executable prompts by urgency, deps, and TODO coverage |
 | [`/b7s-ask [topic]`](./commands/b7s-ask.md) | Re-ask Claude's recent plain-text questions via the structured `AskUserQuestion` UI |
 | [`/b7s-create-skill [name]`](./commands/b7s-create-skill.md) | Scaffold a new skill inside this repo using the `skill-creator` loop, commit, and open a PR |
+| [`/orchestrate-personal [task]`](./commands/orchestrate-personal.md) | Route a task between Claude and Codex (personal machine) |
+| [`/orchestrate-work [task]`](./commands/orchestrate-work.md) | Route a task Gemini-first, Claude-scarce (work machine) |
 | [`/youtube-transcript <url>`](./commands/youtube-transcript.md) | YouTube videos, Shorts, and live URLs |
 | [`/instagram-transcript <url>`](./commands/instagram-transcript.md) | Instagram Reels and posts |
 | [`/tiktok-transcript <url>`](./commands/tiktok-transcript.md) | TikTok videos |

@@ -8,6 +8,19 @@ npx behagoras-skills install
 
 That one command symlinks every selected skill (and its slash commands) into `~/.claude/`, walks you through any per-skill configuration, and verifies the system dependencies. Re-running it is a no-op for anything already in place.
 
+## Plugins
+
+This repository also acts as a Claude Code plugin marketplace. Skills still use the npm channel above; plugins use Claude Code's native marketplace flow.
+
+```text
+/plugin marketplace add behagoras/behagoras-skills
+/plugin install statusline
+```
+
+| Plugin | Install |
+|---|---|
+| [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline` |
+
 ## Skills
 
 | Skill | One-liner install |

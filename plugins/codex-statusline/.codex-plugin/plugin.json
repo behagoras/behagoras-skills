@@ -1,0 +1,28 @@
+{
+  "name": "codex-statusline",
+  "version": "0.1.0",
+  "description": "Codex CLI status-line preset with model, reasoning, context, limits, tokens, git, progress, and version items.",
+  "author": {
+    "name": "behagoras",
+    "url": "https://github.com/behagoras"
+  },
+  "homepage": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/codex-statusline",
+  "repository": "https://github.com/behagoras/behagoras-skills",
+  "license": "MIT",
+  "keywords": ["codex", "codex-cli", "statusline", "productivity"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Status Line",
+    "shortDescription": "Apply a safe Codex CLI status-line preset.",
+    "longDescription": "Installs a skill and helper scripts for configuring Codex CLI's native tui.status_line footer items. The preset uses only built-in Codex status-line IDs.",
+    "developerName": "behagoras",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/codex-statusline",
+    "defaultPrompt": [
+      "Use codex-statusline to apply the recommended Codex CLI status line.",
+      "Use codex-statusline to audit my Codex status-line config."
+    ],
+    "brandColor": "#10A37F"
+  }
+}

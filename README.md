@@ -8,7 +8,7 @@ npx behagoras-skills install
 
 That one command symlinks every selected skill (and its slash commands) into `~/.claude/`, walks you through any per-skill configuration, and verifies the system dependencies. Re-running it is a no-op for anything already in place.
 
-## Plugins
+## Claude Code plugins
 
 This repository also acts as a Claude Code plugin marketplace. Skills still use the npm channel above; plugins use Claude Code's native marketplace flow.
 
@@ -20,6 +20,16 @@ This repository also acts as a Claude Code plugin marketplace. Skills still use 
 | Plugin | Install |
 |---|---|
 | [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline` |
+
+## Codex plugins
+
+This repository also exposes a Codex plugin marketplace at [`.agents/plugins/marketplace.json`](./.agents/plugins/marketplace.json). Codex plugins use Codex CLI's `/plugins` browser and native plugin format.
+
+| Plugin | Use for |
+|---|---|
+| [`codex-statusline`](./plugins/codex-statusline/README.md) — Codex-native `tui.status_line` preset with model, reasoning, context, limits, tokens, git, progress, current directory, and version | Install from `/plugins`, then ask Codex to use `codex-statusline` |
+
+The Codex status-line plugin intentionally does not reuse Claude Code's command-backed `statusLine` API. Codex CLI currently persists ordered built-in footer items to `~/.codex/config.toml` under `[tui].status_line`.
 
 ## Skills
 

@@ -18,19 +18,15 @@ Install the plugin:
 
 If another marketplace also provides `statusline`, disambiguate with `/plugin install statusline@behagoras-skills`.
 
-The plugin ships a default `statusLine` setting that runs:
+Enable the status line:
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "node ${CLAUDE_PLUGIN_ROOT}/statusline.mjs",
-    "padding": 0
-  }
-}
+```text
+/statusline:enable
 ```
 
-If `~/.claude/settings.json` already has a user-level `statusLine`, that user setting overrides the plugin default. Delete or move the user-level entry to use this plugin's status line.
+Claude Code v2.1.201 does not apply top-level `statusLine` from plugin `settings.json`; its plugin settings currently support only `agent` and `subagentStatusLine`. The enable command copies the renderer to `~/.claude/statusline-behagoras.mjs`, backs up `~/.claude/settings.json`, and writes the user-level `statusLine` that Claude Code reads.
+
+If `~/.claude/settings.json` already has a user-level `statusLine`, the enable command replaces it after writing a timestamped backup.
 
 ## Display
 

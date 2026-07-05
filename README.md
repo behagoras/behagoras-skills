@@ -15,11 +15,12 @@ This repository also acts as a Claude Code plugin marketplace. Skills still use 
 ```text
 /plugin marketplace add behagoras/behagoras-skills
 /plugin install statusline
+/statusline:enable
 ```
 
 | Plugin | Install |
 |---|---|
-| [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline` |
+| [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline`, then `/statusline:enable` |
 
 ## Skills
 

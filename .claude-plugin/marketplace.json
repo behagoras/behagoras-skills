@@ -1,0 +1,25 @@
+{
+  "name": "behagoras-skills",
+  "description": "Behagoras Claude Code plugins and skills-adjacent tools.",
+  "owner": {
+    "name": "behagoras"
+  },
+  "plugins": [
+    {
+      "name": "statusline",
+      "displayName": "Statusline",
+      "source": "./plugins/statusline",
+      "description": "Custom Claude Code status line with model, context, cost, duration, and rate-limit usage.",
+      "version": "0.1.0",
+      "author": {
+        "name": "behagoras",
+        "url": "https://github.com/behagoras"
+      },
+      "homepage": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/statusline",
+      "repository": "https://github.com/behagoras/behagoras-skills",
+      "license": "MIT",
+      "keywords": ["claude-code", "statusline", "productivity"],
+      "category": "productivity"
+    }
+  ]
+}

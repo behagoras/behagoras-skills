@@ -5,11 +5,11 @@
 The target Behagoras footer is two lines of content:
 
 ```text
-gpt-5.3-codex-spark medium | ctx 0% used / 272k | tokens 12.4k | v0.142.5
-5h 17% | weekly 87% | feat/codex-statusline-plugin | PR #15 | +12 -3
+gpt-5.3-codex-spark medium | ctx 100% left / 272k | tokens 12.4k | v0.142.5
+5h 17% left | feat/codex-statusline-plugin | PR #15 | +12 -3
 ```
 
-Line 1 should focus on session/runtime state. Line 2 should focus on quotas and workspace state.
+Line 1 should focus on session/runtime state. Line 2 should focus on what remains in the current working session plus workspace state. Weekly quota can remain available through `/status` or an optional footer item, but it should not dominate the default session-focused layout.
 
 ## Current Codex Limitation
 

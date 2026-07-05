@@ -43,11 +43,10 @@
   ],
   "recommendedPreset": [
     "model-with-reasoning",
-    "context-used",
-    "context-window-size",
+    "context-remaining",
     "five-hour-limit",
-    "weekly-limit",
     "used-tokens",
+    "context-window-size",
     "git-branch",
     "pull-request-number",
     "branch-changes",

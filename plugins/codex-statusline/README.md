@@ -1,6 +1,6 @@
 # Codex Status Line
 
-Codex CLI status-line preset for operational session telemetry: model and reasoning, context usage, rate limits, token usage, git and PR state, task progress, current directory, and Codex version.
+Codex CLI status-line preset for operational session telemetry: model and reasoning, context remaining, 5-hour quota remaining, token usage, git and PR state, task progress, current directory, and Codex version.
 
 Codex CLI does not currently expose Claude Code's command-backed `statusLine` API. This plugin uses Codex's native `tui.status_line` config instead.
 
@@ -68,11 +68,10 @@ node plugins/codex-statusline/scripts/apply-codex-statusline.mjs --revert ~/.cod
 [tui]
 status_line = [
   "model-with-reasoning",
-  "context-used",
-  "context-window-size",
+  "context-remaining",
   "five-hour-limit",
-  "weekly-limit",
   "used-tokens",
+  "context-window-size",
   "git-branch",
   "pull-request-number",
   "branch-changes",
@@ -85,7 +84,7 @@ status_line_use_colors = true
 
 Items with no data are temporarily omitted by Codex. For example, PR number and branch changes require git metadata, rate limits require usage data, and task progress appears only after checklist progress exists.
 
-Codex's compact rate-limit labels are ambiguous in the footer. Treat `5h N%` and `weekly N%` as Codex-owned quota snapshots from the built-in `five-hour-limit` and `weekly-limit` items; use `/status` for the authoritative breakdown and reset times.
+Codex's compact rate-limit labels are ambiguous in the footer. Treat `5h N%` as Codex's built-in 5-hour quota snapshot, and use `/status` for the authoritative breakdown and reset time. `weekly-limit` is supported by Codex, but it is intentionally not in this default preset so the footer emphasizes what remains in the current working session.
 
 ## Safety
 

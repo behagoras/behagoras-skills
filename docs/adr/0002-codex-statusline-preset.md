@@ -39,11 +39,10 @@ The preset uses only known Codex IDs:
 [tui]
 status_line = [
   "model-with-reasoning",
-  "context-used",
-  "context-window-size",
+  "context-remaining",
   "five-hour-limit",
-  "weekly-limit",
   "used-tokens",
+  "context-window-size",
   "git-branch",
   "pull-request-number",
   "branch-changes",
@@ -69,6 +68,8 @@ Current limitations remain:
 - no arbitrary ANSI segment rendering
 - no custom 10-character progress bar
 - no built-in cost or duration item
-- rate-limit items use compact Codex-owned labels such as `5h N%` and `weekly N%`; use `/status` for the authoritative breakdown
+- rate-limit items use compact Codex-owned labels such as `5h N%`; use `/status` for the authoritative breakdown
+
+The default preset intentionally omits `weekly-limit` even though Codex supports it. The footer is scoped to "what remains in this working session": context remaining and the 5-hour quota window. Users who want weekly quota in the footer can add `weekly-limit` manually with `/statusline`.
 
 If Codex later documents a command-backed status-line hook or adds cost/duration/progress items, this plugin should be updated and this ADR amended or superseded.

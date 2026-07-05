@@ -55,7 +55,7 @@ node "${PLUGIN_ROOT}/scripts/print-codex-statusline-config.mjs"
 
 Tambien puedes pedir al usuario abrir Codex y usar `/statusline`; Codex puede omitir items sin datos disponibles, como PR, limites o task progress.
 
-Los items `five-hour-limit` y `weekly-limit` son snapshots compactos controlados por Codex. Si el porcentaje parece ambiguo, pide comparar con `/status`, que es la vista autoritativa para desglose y resets.
+El preset por defecto prioriza lo que queda en la sesion actual: `context-remaining` y `five-hour-limit`. `weekly-limit` esta soportado por Codex, pero no esta en el preset por defecto para no mezclar cuota semanal con la lectura de sesion. Si el porcentaje parece ambiguo, pide comparar con `/status`, que es la vista autoritativa para desglose y resets.
 
 ## Revertir
 

@@ -30,7 +30,11 @@ Done when: every checklist item is applied or explicitly N/A for this task.
 
 ### 3. Dispatch and verify
 
-Dispatch on the chosen route. Prefer `--read-only` unless writes are the point of the task. If automatic verification exists (tests, lint, schema), run it immediately after.
+Dispatch on the chosen route, via the **direct path by default**: launch `gemini-run.mjs` in background Bash and follow the live per-run log — zero subagent cost. Launch the `gemini-executor` subagent ONLY when the output will be huge and must be summarized away from the main context; its launch itself spends Claude tokens (charge them in step 5). Mechanics, exit codes, and field workarounds: [references/dispatch-notes.md](references/dispatch-notes.md). Prefer `--read-only` unless writes are the point of the task. If automatic verification exists (tests, lint, schema), run it immediately after.
+
+**Triage the failure class before retrying — infra failures don't burn the retry:**
+- Exit 4 (auth), 5 (folder trust), or 124 (timeout) → environment problem, not a prompt problem. Fix it (re-auth, `--trust`, raise `--timeout`) and re-dispatch the SAME prompt. Costs no retry and never escalates to Claude by itself.
+- Task-quality failure (wrong/incomplete output, verification red) → retry policy below.
 
 **Retry policy — Gemini failures stay cheap:**
 - First failure → draft ONE corrected prompt (fix what the failure revealed: missing label, buried instruction, wrong anchor) and retry via `/gemini:delegate --flash`. Do not spend Claude on the correction.
@@ -47,7 +51,7 @@ Done when: the task is closed by verification, closed by a clean adversarial pas
 
 ### 5. Log the savings
 
-Append one JSONL line to `~/.orchestrator/memory-work.jsonl` for EVERY routed task — successes, retries, escalations, all of it. Schema, savings formula, and token heuristics: [references/savings-report.md](references/savings-report.md). This log IS the boss's experiment; an unlogged task is a saving that never happened.
+Append one JSONL line to `~/.orchestrator/memory-work.jsonl` for EVERY routed task — successes, retries, escalations, all of it. Schema, savings formula, and token heuristics: [references/savings-report.md](references/savings-report.md). Include the run's `~/.gemini-runs/` directory in the line and count any `gemini-executor` launch as Claude spend — the run artifacts make the boss's numbers auditable. This log IS the boss's experiment; an unlogged task is a saving that never happened.
 
 Weekly report for the boss: `python3 scripts/weekly_report.py` (in this skill's folder).
 

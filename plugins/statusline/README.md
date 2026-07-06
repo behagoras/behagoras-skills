@@ -18,19 +18,9 @@ Install the plugin:
 
 If another marketplace also provides `statusline`, disambiguate with `/plugin install statusline@behagoras-skills`.
 
-The plugin ships a default `statusLine` setting that runs:
+On session start, a `SessionStart` hook (`hooks/ensure-statusline.mjs`) writes the `statusLine` entry into `~/.claude/settings.json` for you, pointing at this plugin's script via the resolved `CLAUDE_PLUGIN_ROOT`. It re-runs on every session, so it self-heals if a plugin update changes the install path.
 
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "node ${CLAUDE_PLUGIN_ROOT}/statusline.mjs",
-    "padding": 0
-  }
-}
-```
-
-If `~/.claude/settings.json` already has a user-level `statusLine`, that user setting overrides the plugin default. Delete or move the user-level entry to use this plugin's status line.
+If `~/.claude/settings.json` already has a `statusLine` from another plugin or a manual entry, the hook leaves it alone — delete or replace that entry yourself to switch to this plugin's status line.
 
 ## Display
 

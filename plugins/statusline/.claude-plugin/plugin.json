@@ -10,5 +10,6 @@
   "homepage": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/statusline",
   "repository": "https://github.com/behagoras/behagoras-skills",
   "license": "MIT",
-  "keywords": ["claude-code", "statusline", "productivity"]
+  "keywords": ["claude-code", "statusline", "productivity"],
+  "hooks": "./hooks/hooks.json"
 }

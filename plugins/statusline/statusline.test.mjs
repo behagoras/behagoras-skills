@@ -93,6 +93,42 @@ test("uses two lines when COLUMNS is narrow", async () => {
   assert.equal(output, "[Opus] | ███░░░░░░░ 34%\n$1.23 | 45m 12s | 5h: 23% 7d: 41%");
 });
 
+test("shows the effort level next to the model when present", async () => {
+  const output = stripAnsi(
+    await runStatusline(
+      JSON.stringify({
+        model: { display_name: "Opus" },
+        effort: { level: "high" },
+        context_window: { used_percentage: 10 },
+        cost: { total_cost_usd: 0, total_duration_ms: 0 }
+      }),
+      { COLUMNS: "120" }
+    )
+  );
+
+  assert.match(output, /^\[Opus · high\] \| /);
+});
+
+test("shows context token counts when the window size is present", async () => {
+  const output = stripAnsi(
+    await runStatusline(
+      JSON.stringify({
+        model: { display_name: "Opus" },
+        context_window: {
+          used_percentage: 26,
+          total_input_tokens: 51646,
+          total_output_tokens: 187,
+          context_window_size: 200000
+        },
+        cost: { total_cost_usd: 0, total_duration_ms: 0 }
+      }),
+      { COLUMNS: "120" }
+    )
+  );
+
+  assert.match(output, /26% \(52k\/200k\)/);
+});
+
 test("prints a minimal fallback for malformed or empty stdin", async () => {
   assert.equal(stripAnsi(await runStatusline("", { COLUMNS: "120" })), "[Claude]");
   assert.equal(stripAnsi(await runStatusline("{bad json", { COLUMNS: "120" })), "[Claude]");

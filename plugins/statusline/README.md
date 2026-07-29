@@ -1,6 +1,6 @@
 # Statusline
 
-Custom Claude Code status line showing the active model, context-window usage, session cost and duration, and subscription rate limits when Claude Code provides them.
+Custom Claude Code status line showing the active model (with its reasoning effort), context-window usage with token counts, session cost and duration, and subscription rate limits when Claude Code provides them.
 
 ## Install
 
@@ -27,15 +27,17 @@ If `~/.claude/settings.json` already has a `statusLine` from another plugin or a
 Wide terminals render one line:
 
 ```text
-[Opus] | ███░░░░░░░ 34% | $1.23 | 45m 12s | 5h: 23% 7d: 41%
+[Opus · high] | ███░░░░░░░ 34% (68k/200k) | $1.23 | 45m 12s | 5h: 23% 7d: 41%
 ```
 
 Narrow terminals split the status over two rows:
 
 ```text
-[Opus] | ███░░░░░░░ 34%
+[Opus · high] | ███░░░░░░░ 34% (68k/200k)
 $1.23 | 45m 12s | 5h: 23% 7d: 41%
 ```
+
+The reasoning effort (`· high`) is shown when Claude Code reports `effort.level`, and the context token counts (`68k/200k`) when it reports `context_window.context_window_size`. Both are omitted gracefully when absent, so older Claude Code versions keep the original `[Opus] | ███░░░░░░░ 34%` layout.
 
 Screenshot placeholder:
 

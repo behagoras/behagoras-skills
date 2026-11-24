@@ -207,20 +207,28 @@ function applySpool(key) {
   for (const dir of spoolDirs()) {
     if (!privateDir(dir, false)) continue;
     const file = join(dir, `${key}.json`);
-    if (!existsSync(file)) continue;
+    const claimed = (name) => name.startsWith(`${key}.json.`) && name.endsWith(".claim");
+    if (!existsSync(file) && !readdirSync(dir).some(claimed)) continue;
     // Claim the request by renaming it inside the lock: exactly one hook applies it,
-    // a newer request the CLI writes meanwhile stays for the next hook, and the claim
-    // is removed only after the state is saved.
+    // and a newer request the CLI writes meanwhile stays for the next hook. A claim
+    // left by a failed save is retried first, so the newest request wins.
     withLock(key, () => {
+      const leftovers = readdirSync(dir)
+        .filter(claimed)
+        .map((name) => join(dir, name))
+        .sort((a, b) => statSync(a).mtimeMs - statSync(b).mtimeMs);
       const claim = `${file}.${process.pid}.claim`;
       try {
         renameSync(file, claim);
+        leftovers.push(claim);
       } catch {
-        return; // another hook claimed it
+        // no new request, or another hook claimed it
       }
-      const patch = readJson(claim, null);
-      if (patch) saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
-      rmSync(claim, { force: true });
+      for (const entry of leftovers) {
+        const patch = readJson(entry, null);
+        if (patch) saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
+        rmSync(entry, { force: true });
+      }
     });
   }
 }

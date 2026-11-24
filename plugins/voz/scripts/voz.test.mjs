@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -297,6 +297,25 @@ test("cleanup keeps a folder whose first audio is still rendering", () => {
   writeFileSync(join(dir, "x.m4a.job.json"), "{}");
   run(["clean"], { env });
   assert.equal(existsSync(join(dir, "x.m4a.job.json")), true);
+});
+
+test("a spooled request survives a failed state save and applies on the next hook", () => {
+  const { root, env } = setup();
+  const spoolEnv = { ...env, VOZ_SPOOL: join(root, "spool"), CODEX_THREAD_ID: "c" };
+  mkdirSync(spoolEnv.VOZ_HOME, { recursive: true });
+  writeFileSync(join(spoolEnv.VOZ_HOME, ".last-prune"), "");
+  chmodSync(spoolEnv.VOZ_HOME, 0o555);
+  const path = pathFrom(run(["on", "--harness", "codex"], { env: spoolEnv }));
+  chmodSync(spoolEnv.VOZ_HOME, 0o755);
+  // A folder where state.json belongs makes the save fail after the claim.
+  const blocker = join(spoolEnv.VOZ_HOME, "conversations", "t3-thread-1", "state.json");
+  mkdirSync(join(blocker, "x"), { recursive: true });
+  hook("stop", "codex", { session_id: "c", last_assistant_message: "x" }, spoolEnv);
+  assert.ok(readdirSync(spoolEnv.VOZ_SPOOL).some((name) => name.endsWith(".claim")));
+  rmSync(blocker, { recursive: true });
+  hook("stop", "codex", { session_id: "c", last_assistant_message: `ok\n![Audio](${path})` }, spoolEnv);
+  assert.ok(waitFor(path));
+  assert.deepEqual(readdirSync(spoolEnv.VOZ_SPOOL), []);
 });
 
 test("off stops the prompt hook from asking for audio", () => {

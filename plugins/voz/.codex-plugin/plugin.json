@@ -1,0 +1,25 @@
+{
+  "name": "voz",
+  "version": "0.1.0",
+  "description": "Opt-in voice mode: each reply ends with a spoken summary made by a cheap model and macOS say.",
+  "author": {
+    "name": "behagoras",
+    "url": "https://github.com/behagoras"
+  },
+  "homepage": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/voz",
+  "repository": "https://github.com/behagoras/behagoras-skills",
+  "license": "MIT",
+  "keywords": ["codex", "voice", "tts", "t3-code"],
+  "skills": "./skills/",
+  "hooks": "./hooks/codex.json",
+  "interface": {
+    "displayName": "Voz",
+    "shortDescription": "Spoken summaries of replies, off until you ask.",
+    "longDescription": "Ask Codex to turn voice mode on. Each reply then ends with an audio summary written by gpt-6-luna and read by macOS say. Audio is stored in ~/.local/share/voz and deleted after 14 days.",
+    "developerName": "behagoras",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/voz",
+    "defaultPrompt": ["Use voz to turn voice mode on.", "Use voz to turn voice mode off."]
+  }
+}

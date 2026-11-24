@@ -20,6 +20,7 @@ This repository also acts as a Claude Code plugin marketplace. Skills still use 
 | Plugin | Install |
 |---|---|
 | [`statusline`](./plugins/statusline/README.md) — custom status bar with model, context usage, cost, duration, and rate limits | `/plugin install statusline` |
+| [`voz`](./plugins/voz/README.md): opt-in voice mode that ends each reply with a spoken summary | `/plugin install voz@behagoras-skills` |
 
 ## Codex plugins
 
@@ -28,8 +29,13 @@ This repository also exposes a Codex plugin marketplace at [`.agents/plugins/mar
 | Plugin | Use for |
 |---|---|
 | [`codex-statusline`](./plugins/codex-statusline/README.md) — Codex-native `tui.status_line` preset with model, reasoning, context, limits, tokens, git, progress, current directory, and version | Install from `/plugins`, then ask Codex to use `codex-statusline` |
+| [`voz`](./plugins/voz/README.md): opt-in voice mode that ends each reply with a spoken summary | `codex plugin add voz@behagoras`, then trust its hooks in `/hooks` |
 
 The Codex status-line plugin intentionally does not reuse Claude Code's command-backed `statusLine` API. Codex CLI currently persists ordered built-in footer items to `~/.codex/config.toml` under `[tui].status_line`.
+
+## Antigravity plugins
+
+[`voz`](./plugins/voz/README.md) also ships an Antigravity manifest and hooks. `agy plugin install` takes a local folder: clone this repository and run `agy plugin install plugins/voz`.
 
 ## Skills
 

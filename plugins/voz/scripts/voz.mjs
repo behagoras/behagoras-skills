@@ -87,15 +87,22 @@ const saveState = (key, state) => writeJson(stateFile(key), { ...state, updatedA
 // exited is broken. When the lock stays busy, the caller skips its update.
 export const BUSY = Symbol("busy");
 
-function holderAlive(lock) {
-  const pid = Number(readFileSafe(join(lock, "pid")));
-  if (!pid) return Date.now() - statSync(lock).mtimeMs < 10_000; // holder still writing its pid
+const lockPid = (lock) => Number(readFileSafe(join(lock, "pid"))) || null;
+
+function pidAlive(pid) {
   try {
     process.kill(pid, 0);
     return true;
   } catch (error) {
     return error?.code === "EPERM";
   }
+}
+
+// The holder of a stale lock has exited, or never wrote its pid within 10 s.
+function staleHolder(lock) {
+  const pid = lockPid(lock);
+  if (pid) return pidAlive(pid) ? undefined : pid;
+  return Date.now() - statSync(lock).mtimeMs > 10_000 ? null : undefined;
 }
 
 function withLock(key, fn) {
@@ -110,10 +117,14 @@ function withLock(key, fn) {
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
       try {
-        if (!holderAlive(lock)) {
+        const stale = staleHolder(lock);
+        if (stale !== undefined) {
           const broken = `${lock}.${process.pid}.broken`;
           renameSync(lock, broken);
-          rmSync(broken, { recursive: true, force: true });
+          // Another waiter may have broken it first and a live hook taken it again.
+          // If what we moved is not the stale lock we saw, put it back.
+          if (lockPid(broken) !== stale) renameSync(broken, lock);
+          else rmSync(broken, { recursive: true, force: true });
           continue;
         }
       } catch {
@@ -197,11 +208,19 @@ function applySpool(key) {
     if (!privateDir(dir, false)) continue;
     const file = join(dir, `${key}.json`);
     if (!existsSync(file)) continue;
-    // Read and remove the request inside the lock, so only one hook applies it.
+    // Claim the request by renaming it inside the lock: exactly one hook applies it,
+    // a newer request the CLI writes meanwhile stays for the next hook, and the claim
+    // is removed only after the state is saved.
     withLock(key, () => {
-      const patch = readJson(file, null);
-      rmSync(file, { force: true });
+      const claim = `${file}.${process.pid}.claim`;
+      try {
+        renameSync(file, claim);
+      } catch {
+        return; // another hook claimed it
+      }
+      const patch = readJson(claim, null);
       if (patch) saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
+      rmSync(claim, { force: true });
     });
   }
 }

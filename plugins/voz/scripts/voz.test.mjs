@@ -225,12 +225,29 @@ test("cleanup removes render files abandoned for over an hour", () => {
   const dir = join(env.VOZ_HOME, "conversations", "t3-stale");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "state.json"), JSON.stringify({ active: false }));
-  const job = join(dir, "x.m4a.job.json");
-  writeFileSync(job, JSON.stringify({ reply: "texto viejo" }));
   const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-  utimesSync(job, twoHoursAgo, twoHoursAgo);
+  for (const name of ["x.m4a.job.json", "summary-123.txt", ".lock"]) {
+    const file = join(dir, name);
+    if (name === ".lock") mkdirSync(file);
+    else writeFileSync(file, "texto viejo");
+    utimesSync(file, twoHoursAgo, twoHoursAgo);
+  }
   run(["clean"], { env });
   assert.equal(existsSync(dir), false);
+});
+
+test("a lock left by a dead process does not block the hooks", () => {
+  const { env } = setup();
+  const sessionEnv = { ...env, CLAUDE_CODE_SESSION_ID: "a" };
+  run(["on", "--harness", "claude"], { env: sessionEnv });
+  hook("stop", "claude", { session_id: "a", last_assistant_message: "x" }, env);
+  const lock = join(env.VOZ_HOME, "conversations", "t3-thread-1", ".lock");
+  mkdirSync(lock);
+  const old = new Date(Date.now() - 60 * 1000);
+  utimesSync(lock, old, old);
+  const out = JSON.parse(hook("prompt", "claude", { session_id: "a", prompt: "hola" }, env));
+  assert.ok(pathFrom(out.hookSpecificOutput.additionalContext));
+  assert.equal(existsSync(lock), false);
 });
 
 test("two on calls in one sandboxed turn hand out the same audio path", () => {

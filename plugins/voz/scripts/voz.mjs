@@ -81,6 +81,36 @@ function writeJson(file, value) {
 const loadState = (key) => readJson(stateFile(key), null);
 const saveState = (key, state) => writeJson(stateFile(key), { ...state, updatedAt: Date.now() });
 
+// Hooks from two agents can touch one conversation at the same moment (a handoff
+// right after the previous turn ends). Each read-modify-write runs under a lock
+// folder; mkdir is atomic. A lock older than 10 s belongs to a dead process.
+function withLock(key, fn) {
+  mkdirSync(conversationDir(key), { recursive: true });
+  const lock = join(conversationDir(key), ".lock");
+  const deadline = Date.now() + 3000;
+  let held = false;
+  while (!held) {
+    try {
+      mkdirSync(lock);
+      held = true;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { recursive: true, force: true });
+      } catch {
+        // the holder released it meanwhile
+      }
+      if (Date.now() > deadline) break;
+      sleep(20);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    if (held) rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 // Agent sandboxes (Codex workspace-write, for example) let the CLI write only to the
 // project and temp folders. The CLI then leaves its change in a spool under /tmp,
 // and the next hook, which runs outside the sandbox, applies it.
@@ -114,9 +144,8 @@ function validPatch(key, patch) {
 }
 
 function changeState(key, patch) {
-  const next = { ...(loadState(key) || {}), ...patch };
   try {
-    saveState(key, next);
+    withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...patch }));
     return "saved";
   } catch (error) {
     if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
@@ -148,7 +177,7 @@ function applySpool(key) {
     const file = join(dir, `${key}.json`);
     const patch = readJson(file, null);
     if (!patch) continue;
-    saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
+    withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) }));
     rmSync(file, { force: true });
   }
 }
@@ -249,14 +278,17 @@ export function onPromptHook(harness, payload, env = process.env) {
   const key = conversationKey(harness, sessionId, env);
   if (!key) return null;
   applySpool(key);
-  const state = loadState(key);
-  if (!state?.active) return null;
+  if (!loadState(key)?.active) return null;
   const me = `${harness}:${sessionId}`;
   const { chain, agentPid } = lineage();
-  if (!claimConversation(state, me, chain)) return null;
-  const path = newAudioPath(key);
-  saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: path });
-  return audioInstruction(path);
+  const path = withLock(key, () => {
+    const state = loadState(key);
+    if (!state?.active || !claimConversation(state, me, chain)) return null;
+    const next = newAudioPath(key);
+    saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: next });
+    return next;
+  });
+  return path ? audioInstruction(path) : null;
 }
 
 export function onStopHook(harness, payload, env = process.env) {
@@ -265,14 +297,16 @@ export function onStopHook(harness, payload, env = process.env) {
   const key = conversationKey(harness, sessionId, env);
   if (!key) return null;
   applySpool(key);
-  const state = loadState(key);
-  if (!state?.active) return null;
+  if (!loadState(key)?.active) return null;
   // Only the before-turn hook and "on" change the owner. A late Stop from a previous
   // owner must not take back a turn that a new agent has already announced.
   const me = `${harness}:${sessionId}`;
-  if (state.owner !== me) return null;
-  const pending = state.pending;
-  saveState(key, { ...state, pending: null });
+  const pending = withLock(key, () => {
+    const state = loadState(key);
+    if (!state?.active || state.owner !== me) return null;
+    saveState(key, { ...state, pending: null });
+    return state.pending;
+  });
   if (!pending) return null;
 
   const reply = payload.last_assistant_message;
@@ -482,10 +516,14 @@ function audioFiles() {
     const dir = conversationDir(key);
     return readdirSync(dir)
       .filter((name) => name.endsWith(".m4a") && !name.endsWith(".part.m4a"))
-      .map((name) => {
+      .flatMap((name) => {
         const file = join(dir, name);
-        const stats = statSync(file);
-        return { key, file, bytes: stats.size, mtime: stats.mtimeMs };
+        try {
+          const stats = statSync(file);
+          return [{ key, file, bytes: stats.size, mtime: stats.mtimeMs }];
+        } catch {
+          return []; // deleted while we listed it
+        }
       });
   });
 }
@@ -503,8 +541,12 @@ export function clean({ days, key, all } = {}) {
     for (const name of readdirSync(conversationsDir())) {
       const dir = conversationDir(name);
       for (const file of readdirSync(dir)) {
-        const leftover = /\.(job\.json|part\.m4a|m4a\.txt)$/.test(file);
-        if (leftover && statSync(join(dir, file)).mtimeMs < Date.now() - ABANDONED_MS) rmSync(join(dir, file), { force: true });
+        const leftover = /\.(job\.json|part\.m4a|m4a\.txt)$|^summary-\d+\.txt$|^\.lock$/.test(file);
+        try {
+          if (leftover && statSync(join(dir, file)).mtimeMs < Date.now() - ABANDONED_MS) rmSync(join(dir, file), { recursive: true, force: true });
+        } catch {
+          // a finishing worker removed it first
+        }
       }
       // Anything besides state.json is audio or a render still in progress.
       const busy = readdirSync(dir).some((f) => f !== "state.json");

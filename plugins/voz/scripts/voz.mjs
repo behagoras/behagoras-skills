@@ -83,31 +83,53 @@ const saveState = (key, state) => writeJson(stateFile(key), { ...state, updatedA
 
 // Hooks from two agents can touch one conversation at the same moment (a handoff
 // right after the previous turn ends). Each read-modify-write runs under a lock
-// folder; mkdir is atomic. A lock older than 10 s belongs to a dead process.
+// folder that records its holder's pid; mkdir is atomic. A lock whose holder has
+// exited is broken. When the lock stays busy, the caller skips its update.
+export const BUSY = Symbol("busy");
+
+function holderAlive(lock) {
+  const pid = Number(readFileSafe(join(lock, "pid")));
+  if (!pid) return Date.now() - statSync(lock).mtimeMs < 10_000; // holder still writing its pid
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
 function withLock(key, fn) {
   mkdirSync(conversationDir(key), { recursive: true });
   const lock = join(conversationDir(key), ".lock");
   const deadline = Date.now() + 3000;
-  let held = false;
-  while (!held) {
+  for (;;) {
     try {
       mkdirSync(lock);
-      held = true;
+      writeFileSync(join(lock, "pid"), String(process.pid));
+      break;
     } catch (error) {
       if (error?.code !== "EEXIST") throw error;
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 10_000) rmSync(lock, { recursive: true, force: true });
+        if (!holderAlive(lock)) {
+          const broken = `${lock}.${process.pid}.broken`;
+          renameSync(lock, broken);
+          rmSync(broken, { recursive: true, force: true });
+          continue;
+        }
       } catch {
-        // the holder released it meanwhile
+        // another process released or broke it meanwhile
       }
-      if (Date.now() > deadline) break;
+      if (Date.now() > deadline) {
+        log(`lock busy for ${key}; skipped an update`);
+        return BUSY;
+      }
       sleep(20);
     }
   }
   try {
     return fn();
   } finally {
-    if (held) rmSync(lock, { recursive: true, force: true });
+    rmSync(lock, { recursive: true, force: true });
   }
 }
 
@@ -145,8 +167,7 @@ function validPatch(key, patch) {
 
 function changeState(key, patch) {
   try {
-    withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...patch }));
-    return "saved";
+    if (withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...patch })) !== BUSY) return "saved";
   } catch (error) {
     if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
   }
@@ -175,10 +196,13 @@ function applySpool(key) {
   for (const dir of spoolDirs()) {
     if (!privateDir(dir, false)) continue;
     const file = join(dir, `${key}.json`);
-    const patch = readJson(file, null);
-    if (!patch) continue;
-    withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) }));
-    rmSync(file, { force: true });
+    if (!existsSync(file)) continue;
+    // Read and remove the request inside the lock, so only one hook applies it.
+    withLock(key, () => {
+      const patch = readJson(file, null);
+      rmSync(file, { force: true });
+      if (patch) saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
+    });
   }
 }
 
@@ -288,7 +312,7 @@ export function onPromptHook(harness, payload, env = process.env) {
     saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: next });
     return next;
   });
-  return path ? audioInstruction(path) : null;
+  return path && path !== BUSY ? audioInstruction(path) : null;
 }
 
 export function onStopHook(harness, payload, env = process.env) {
@@ -307,7 +331,7 @@ export function onStopHook(harness, payload, env = process.env) {
     saveState(key, { ...state, pending: null });
     return state.pending;
   });
-  if (!pending) return null;
+  if (!pending || pending === BUSY) return null;
 
   const reply = payload.last_assistant_message;
   if (typeof reply === "string" && !reply.includes(pending)) {
@@ -521,7 +545,8 @@ function audioFiles() {
         try {
           const stats = statSync(file);
           return [{ key, file, bytes: stats.size, mtime: stats.mtimeMs }];
-        } catch {
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error;
           return []; // deleted while we listed it
         }
       });
@@ -544,8 +569,8 @@ export function clean({ days, key, all } = {}) {
         const leftover = /\.(job\.json|part\.m4a|m4a\.txt)$|^summary-\d+\.txt$|^\.lock$/.test(file);
         try {
           if (leftover && statSync(join(dir, file)).mtimeMs < Date.now() - ABANDONED_MS) rmSync(join(dir, file), { recursive: true, force: true });
-        } catch {
-          // a finishing worker removed it first
+        } catch (error) {
+          if (error?.code !== "ENOENT") throw error; // ENOENT: a finishing worker removed it first
         }
       }
       // Anything besides state.json is audio or a render still in progress.

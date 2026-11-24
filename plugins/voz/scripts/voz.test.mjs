@@ -250,6 +250,34 @@ test("a lock left by a dead process does not block the hooks", () => {
   assert.equal(existsSync(lock), false);
 });
 
+test("a hook that cannot get the lock from a live holder changes nothing", () => {
+  const { env } = setup();
+  run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
+  hook("stop", "claude", { session_id: "a", last_assistant_message: "x" }, env);
+  const before = state(env);
+  const lock = join(env.VOZ_HOME, "conversations", "t3-thread-1", ".lock");
+  mkdirSync(lock);
+  writeFileSync(join(lock, "pid"), String(process.pid));
+  assert.equal(hook("prompt", "codex", { session_id: "b", prompt: "hola" }, env), "");
+  assert.deepEqual([state(env).owner, state(env).pending], [before.owner, before.pending]);
+});
+
+test("clean reports a permission error instead of passing silently", () => {
+  const { env } = setup();
+  const dir = join(env.VOZ_HOME, "conversations", "t3-ro");
+  mkdirSync(dir, { recursive: true });
+  const job = join(dir, "x.m4a.job.json");
+  writeFileSync(job, "{}");
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(job, old, old);
+  chmodSync(dir, 0o555);
+  const result = spawnSync(process.execPath, [script, "clean"], { encoding: "utf8", env });
+  chmodSync(dir, 0o755);
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /blocked deleting/);
+  assert.equal(existsSync(job), true);
+});
+
 test("two on calls in one sandboxed turn hand out the same audio path", () => {
   const { root, env } = setup();
   const spoolEnv = { ...env, VOZ_SPOOL: join(root, "spool"), CODEX_THREAD_ID: "c" };

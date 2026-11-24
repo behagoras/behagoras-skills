@@ -42,6 +42,15 @@ function run(args, { env, stdin = "" }) {
 const hook = (event, harness, payload, env) =>
   run(["hook", event, "--harness", harness], { env, stdin: JSON.stringify(payload) });
 
+// Runs a hook under a short-lived node process that stands in for another agent,
+// so the test process is not that agent's ancestor.
+function hookFromOtherAgent(event, harness, payload, env) {
+  const wrapper = `const r = require("node:child_process").spawnSync(process.execPath, ${JSON.stringify([script, "hook", event, "--harness", harness])}, { input: ${JSON.stringify(JSON.stringify(payload))}, encoding: "utf8" }); process.stdout.write(r.stdout);`;
+  const result = spawnSync(process.execPath, ["-e", wrapper], { encoding: "utf8", env });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout;
+}
+
 const pathFrom = (text) => text.match(/!\[Audio\]\(([^)]+)\)/)?.[1];
 
 function waitFor(file, ms = 8000) {
@@ -86,10 +95,11 @@ test("on, then a full Claude turn renders a summary at the announced path", () =
   assert.deepEqual([index[1].conversation, index[1].harness, index[1].summarizer], ["t3-thread-1", "claude", "claude"]);
 });
 
-test("a provider switch in the same T3 thread keeps voice mode on", () => {
+test("a provider switch in the same T3 thread keeps voice mode on, even after an interrupted turn", () => {
   const { env } = setup();
   run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
-  hook("stop", "claude", { session_id: "a", last_assistant_message: "sin audio" }, env);
+  hookFromOtherAgent("stop", "claude", { session_id: "a", last_assistant_message: "sin audio" }, env);
+  hookFromOtherAgent("prompt", "claude", { session_id: "a", prompt: "una tarea que interrumpo" }, env);
   const out = JSON.parse(hook("prompt", "codex", { session_id: "b", prompt: "hola" }, env));
   const path = pathFrom(out.hookSpecificOutput.additionalContext);
   assert.equal(state(env).owner, "codex:b");
@@ -195,6 +205,27 @@ test("Stop prunes expired audio even while voice mode is off", () => {
   utimesSync(old, longAgo, longAgo);
   hook("stop", "claude", { session_id: "z", last_assistant_message: "hola" }, env);
   assert.equal(existsSync(old), false);
+});
+
+test("two on calls in one sandboxed turn hand out the same audio path", () => {
+  const { root, env } = setup();
+  const spoolEnv = { ...env, VOZ_SPOOL: join(root, "spool"), CODEX_THREAD_ID: "c" };
+  mkdirSync(spoolEnv.VOZ_HOME, { recursive: true });
+  chmodSync(spoolEnv.VOZ_HOME, 0o555);
+  const first = pathFrom(run(["on", "--harness", "codex"], { env: spoolEnv }));
+  const second = pathFrom(run(["on", "--harness", "codex"], { env: spoolEnv }));
+  chmodSync(spoolEnv.VOZ_HOME, 0o755);
+  assert.equal(second, first);
+});
+
+test("cleanup keeps a folder whose first audio is still rendering", () => {
+  const { env } = setup();
+  const dir = join(env.VOZ_HOME, "conversations", "t3-busy");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "state.json"), JSON.stringify({ active: false }));
+  writeFileSync(join(dir, "x.m4a.job.json"), "{}");
+  run(["clean"], { env });
+  assert.equal(existsSync(join(dir, "x.m4a.job.json")), true);
 });
 
 test("off stops the prompt hook from asking for audio", () => {

@@ -18,7 +18,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -28,8 +28,8 @@ const SESSION_ENV = {
   codex: "CODEX_THREAD_ID",
   antigravity: "ANTIGRAVITY_CONVERSATION_ID",
 };
-// A turn that never reached Stop (an interrupted one) releases the conversation after this.
-const STALE_TURN_MS = 12 * 60 * 60 * 1000;
+// Wrappers between an agent and the commands it runs; the agent is the first other ancestor.
+const WRAPPERS = new Set(["sh", "bash", "zsh", "dash", "fish", "env", "timeout", "sandbox-exec"]);
 const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
 const SUMMARIZER_TIMEOUT_MS = 90 * 1000;
 const AUDIO_LINE = /^!\[[^\]]*\]\([^)]*\.m4a\)\s*$/gm;
@@ -106,8 +106,7 @@ function validPatch(key, patch) {
   const clean = {};
   if (typeof patch.active === "boolean") clean.active = patch.active;
   if (typeof patch.owner === "string" || patch.owner === null) clean.owner = patch.owner;
-  if (typeof patch.turnOpen === "boolean") clean.turnOpen = patch.turnOpen;
-  for (const field of ["turnStartedAt", "activatedAt"]) if (Number.isFinite(patch[field])) clean[field] = patch[field];
+  for (const field of ["ownerPid", "activatedAt"]) if (Number.isFinite(patch[field]) || patch[field] === null) clean[field] = patch[field];
   const pending = patch.pending;
   const inside = typeof pending === "string" && dirname(pending) === conversationDir(key) && pending.endsWith(".m4a");
   if (pending === null || inside) clean.pending = pending;
@@ -132,6 +131,15 @@ function changeState(key, patch) {
     }
   }
   throw new Error(`cannot write voice mode state for ${key}`);
+}
+
+function spooledPatch(key) {
+  for (const dir of spoolDirs()) {
+    if (!privateDir(dir, false)) continue;
+    const patch = readJson(join(dir, `${key}.json`), null);
+    if (patch) return validPatch(key, patch);
+  }
+  return {};
 }
 
 function applySpool(key) {
@@ -205,14 +213,34 @@ function sessionFromPayload(harness, payload) {
   return harness === "antigravity" ? payload.conversationId : payload.session_id;
 }
 
-// Decides whether this agent session may act for the conversation.
-// Another session that fires while the owner's turn is open is an agent the owner
-// launched (for example `codex exec` from Claude Code) and stays quiet. Once the
-// owner's turn is closed, a new session is a provider switch and takes over.
-export function claimConversation(state, me, now = Date.now()) {
+function processTable() {
+  const out = spawnSync("ps", ["-axo", "pid=,ppid=,comm="], { encoding: "utf8" }).stdout || "";
+  const table = new Map();
+  for (const line of out.split("\n")) {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+    if (match) table.set(Number(match[1]), { ppid: Number(match[2]), name: basename(match[3]).replace(/^-/, "") });
+  }
+  return table;
+}
+
+// Process ids above this one, nearest first, and the nearest one that is not a
+// shell or wrapper: the agent that runs this hook or command.
+export function lineage(table = processTable(), pid = process.pid) {
+  const chain = [];
+  for (let current = table.get(pid)?.ppid; current > 1 && !chain.includes(current) && chain.length < 64; ) {
+    chain.push(current);
+    current = table.get(current)?.ppid;
+  }
+  return { chain, agentPid: chain.find((p) => !WRAPPERS.has(table.get(p)?.name)) ?? null };
+}
+
+// Decides whether this agent session may act for the conversation. A session that
+// descends from the owner's process is an agent the owner launched (for example
+// `codex exec` from Claude Code) and stays quiet. Any other session is a provider
+// switch, or the owner is gone, so it takes over.
+export function claimConversation(state, me, chain) {
   if (!state.owner || state.owner === me) return true;
-  const ownerBusy = state.turnOpen && now - (state.turnStartedAt || 0) < STALE_TURN_MS;
-  return !ownerBusy;
+  return !(state.ownerPid && chain.includes(state.ownerPid));
 }
 
 export function onPromptHook(harness, payload, env = process.env) {
@@ -224,9 +252,10 @@ export function onPromptHook(harness, payload, env = process.env) {
   const state = loadState(key);
   if (!state?.active) return null;
   const me = `${harness}:${sessionId}`;
-  if (!claimConversation(state, me)) return null;
+  const { chain, agentPid } = lineage();
+  if (!claimConversation(state, me, chain)) return null;
   const path = newAudioPath(key);
-  saveState(key, { ...state, owner: me, turnOpen: true, turnStartedAt: Date.now(), pending: path });
+  saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: path });
   return audioInstruction(path);
 }
 
@@ -239,9 +268,10 @@ export function onStopHook(harness, payload, env = process.env) {
   const state = loadState(key);
   if (!state?.active) return null;
   const me = `${harness}:${sessionId}`;
-  if (!claimConversation(state, me)) return null;
+  const { chain, agentPid } = lineage();
+  if (!claimConversation(state, me, chain)) return null;
   const pending = state.pending;
-  saveState(key, { ...state, owner: me, turnOpen: false, pending: null });
+  saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: null });
   if (!pending) return null;
 
   const reply = payload.last_assistant_message;
@@ -333,7 +363,7 @@ function summarizerCommand(harness, prompt, outFile) {
   if (harness === "codex") {
     return {
       bin: "codex",
-      args: ["exec", "-m", "gpt-6-luna", "-c", "model_reasoning_effort=medium", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-o", outFile, "-"],
+      args: ["exec", "--ignore-user-config", "-m", "gpt-6-luna", "-c", "model_reasoning_effort=medium", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-o", outFile, "-"],
       input: prompt,
       readOut: true,
     };
@@ -468,9 +498,10 @@ export function clean({ days, key, all } = {}) {
   if (existsSync(conversationsDir())) {
     for (const name of readdirSync(conversationsDir())) {
       const dir = conversationDir(name);
-      const hasAudio = readdirSync(dir).some((f) => f.endsWith(".m4a"));
+      // Anything besides state.json is audio or a render still in progress.
+      const busy = readdirSync(dir).some((f) => f !== "state.json");
       const state = loadState(name);
-      if (!hasAudio && (!state?.active || (state.updatedAt || 0) < cutoff)) rmSync(dir, { recursive: true, force: true });
+      if (!busy && (!state?.active || (state.updatedAt || 0) < cutoff)) rmSync(dir, { recursive: true, force: true });
     }
   }
 
@@ -532,7 +563,7 @@ function cli(argv) {
       process.exitCode = 1;
       return;
     }
-    const state = loadState(key) || {};
+    const state = { ...(loadState(key) || {}), ...spooledPatch(key) };
     const spoolNote = (how) => (how === "spooled" ? " The agent sandbox blocked the state folder, so the change applies when this reply ends." : "");
     if (command === "on") {
       if (!owner) {
@@ -542,8 +573,8 @@ function cli(argv) {
       }
       // The prompt hook already ran inactive for this turn, so the CLI hands out
       // this turn's audio path. A repeated "on" in the same turn keeps the same path.
-      const path = state.active && state.turnOpen && state.owner === owner && state.pending ? state.pending : newAudioPath(key);
-      const how = changeState(key, { active: true, activatedAt: Date.now(), owner, turnOpen: true, turnStartedAt: Date.now(), pending: path });
+      const path = state.active && state.owner === owner && state.pending ? state.pending : newAudioPath(key);
+      const how = changeState(key, { active: true, activatedAt: Date.now(), owner, ownerPid: lineage().agentPid, pending: path });
       console.log(
         [
           `Voice mode is on (conversation ${key}).${spoolNote(how)}`,
@@ -558,7 +589,7 @@ function cli(argv) {
       return;
     }
     if (command === "off") {
-      const how = changeState(key, { active: false, pending: null, turnOpen: false });
+      const how = changeState(key, { active: false, pending: null });
       console.log(`Voice mode is off (conversation ${key}).${spoolNote(how)} Leave this reply's audio line out. Its audio stays until cleanup after ${retentionDays()} days; run "clean --current" to delete it now.`);
       return;
     }

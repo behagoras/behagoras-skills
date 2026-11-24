@@ -60,9 +60,9 @@ If the summary model fails or takes more than 90 seconds, the worker reads the r
 
 Inside T3 Code, the plugin keys voice mode on `T3CODE_THREAD_ID`. A T3 thread keeps that id when you switch provider, so voice mode stays on after a handoff from Claude Code to Codex or Antigravity. Outside T3 Code, the key is the agent's own session id.
 
-An agent that another agent starts during its turn, such as `codex exec` run from Claude Code, inherits the thread id. While the owning session's turn is open, the hooks of every other session in the same thread do nothing. Once that turn ends, the next session to start a turn becomes the owner. That is what a handoff looks like. A turn that never reaches its end, such as an interrupted one, releases the thread after 12 hours. Asking to turn voice mode on again moves it to the current agent at once.
+An agent that another agent starts, such as `codex exec` run from Claude Code, inherits the thread id. The hooks tell the two apart by process: each turn records the process id of the agent that owns the conversation. A session whose process descends from the owner's process was started by the owner, so its hooks do nothing. Any other session is a provider switch, or the owner has exited, so it takes over. This also covers a turn you interrupt and then hand off.
 
-The summary models run with `VOZ_INNER=1`, which turns every `voz` hook into a no-op. They also run without tools where the CLI allows it. Claude runs with `--tools ""`. Codex runs in a read-only sandbox without network. Antigravity runs in print mode, where no one can approve a tool.
+The summary models run with `VOZ_INNER=1`, which turns every `voz` hook into a no-op. They also run without tools where the CLI allows it. Claude runs with `--tools ""`. Codex runs with `--ignore-user-config`, so none of your MCP servers, apps, or plugins load, in a read-only sandbox without network. Antigravity runs in print mode, where no one can approve a tool.
 
 ### Sandboxes
 

@@ -318,6 +318,24 @@ test("a spooled request survives a failed state save and applies on the next hoo
   assert.deepEqual(readdirSync(spoolEnv.VOZ_SPOOL), []);
 });
 
+test("a stranded on request never overrides a later off", () => {
+  const { root, env } = setup();
+  const spoolEnv = { ...env, VOZ_SPOOL: join(root, "spool"), CODEX_THREAD_ID: "c" };
+  mkdirSync(spoolEnv.VOZ_HOME, { recursive: true });
+  writeFileSync(join(spoolEnv.VOZ_HOME, ".last-prune"), "");
+  chmodSync(spoolEnv.VOZ_HOME, 0o555);
+  run(["on", "--harness", "codex"], { env: spoolEnv });
+  chmodSync(spoolEnv.VOZ_HOME, 0o755);
+  const blocker = join(spoolEnv.VOZ_HOME, "conversations", "t3-thread-1", "state.json");
+  mkdirSync(join(blocker, "x"), { recursive: true });
+  hook("stop", "codex", { session_id: "c", last_assistant_message: "x" }, spoolEnv);
+  rmSync(blocker, { recursive: true });
+  run(["off", "--harness", "codex"], { env: spoolEnv });
+  assert.equal(hook("prompt", "codex", { session_id: "c", prompt: "hola" }, spoolEnv), "");
+  assert.equal(state(spoolEnv).active, false);
+  assert.deepEqual(readdirSync(spoolEnv.VOZ_SPOOL), []);
+});
+
 test("off stops the prompt hook from asking for audio", () => {
   const { env } = setup();
   run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });

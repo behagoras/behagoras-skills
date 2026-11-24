@@ -178,7 +178,8 @@ function validPatch(key, patch) {
 
 function changeState(key, patch) {
   try {
-    if (withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...patch })) !== BUSY) return "saved";
+    const saved = withLock(key, () => saveState(key, { ...(loadState(key) || {}), ...patch, changedAt: Date.now() }));
+    if (saved !== BUSY) return "saved";
   } catch (error) {
     if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
   }
@@ -226,7 +227,10 @@ function applySpool(key) {
       }
       for (const entry of leftovers) {
         const patch = readJson(entry, null);
-        if (patch) saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
+        const state = loadState(key) || {};
+        // A request older than the last on/off already saved is stale.
+        const fresh = patch && Number(patch.requestedAt) >= (state.changedAt || 0);
+        if (fresh) saveState(key, { ...state, ...validPatch(key, patch), changedAt: Number(patch.requestedAt) });
         rmSync(entry, { force: true });
       }
     });

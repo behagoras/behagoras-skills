@@ -267,11 +267,12 @@ export function onStopHook(harness, payload, env = process.env) {
   applySpool(key);
   const state = loadState(key);
   if (!state?.active) return null;
+  // Only the before-turn hook and "on" change the owner. A late Stop from a previous
+  // owner must not take back a turn that a new agent has already announced.
   const me = `${harness}:${sessionId}`;
-  const { chain, agentPid } = lineage();
-  if (!claimConversation(state, me, chain)) return null;
+  if (state.owner !== me) return null;
   const pending = state.pending;
-  saveState(key, { ...state, owner: me, ownerPid: agentPid, pending: null });
+  saveState(key, { ...state, pending: null });
   if (!pending) return null;
 
   const reply = payload.last_assistant_message;
@@ -489,6 +490,9 @@ function audioFiles() {
   });
 }
 
+// A render takes seconds; job, partial audio, and text files older than this were abandoned.
+const ABANDONED_MS = 60 * 60 * 1000;
+
 export function clean({ days, key, all } = {}) {
   const cutoff = Date.now() - (days ?? retentionDays()) * 24 * 60 * 60 * 1000;
   const doomed = audioFiles().filter((a) => all || (key ? a.key === key : a.mtime < cutoff));
@@ -498,6 +502,10 @@ export function clean({ days, key, all } = {}) {
   if (existsSync(conversationsDir())) {
     for (const name of readdirSync(conversationsDir())) {
       const dir = conversationDir(name);
+      for (const file of readdirSync(dir)) {
+        const leftover = /\.(job\.json|part\.m4a|m4a\.txt)$/.test(file);
+        if (leftover && statSync(join(dir, file)).mtimeMs < Date.now() - ABANDONED_MS) rmSync(join(dir, file), { force: true });
+      }
       // Anything besides state.json is audio or a render still in progress.
       const busy = readdirSync(dir).some((f) => f !== "state.json");
       const state = loadState(name);

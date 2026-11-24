@@ -207,6 +207,32 @@ test("Stop prunes expired audio even while voice mode is off", () => {
   assert.equal(existsSync(old), false);
 });
 
+test("a late Stop from the previous owner leaves the new owner's turn alone", () => {
+  const { env } = setup();
+  run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
+  hookFromOtherAgent("stop", "claude", { session_id: "a", last_assistant_message: "x" }, env);
+  hookFromOtherAgent("prompt", "claude", { session_id: "a", prompt: "turno largo" }, env);
+  const out = JSON.parse(hook("prompt", "codex", { session_id: "b", prompt: "hola" }, env));
+  const path = pathFrom(out.hookSpecificOutput.additionalContext);
+  hookFromOtherAgent("stop", "claude", { session_id: "a", last_assistant_message: "tarde" }, env);
+  assert.deepEqual([state(env).owner, state(env).pending], ["codex:b", path]);
+  hook("stop", "codex", { session_id: "b", last_assistant_message: `ok\n![Audio](${path})` }, env);
+  assert.ok(waitFor(path));
+});
+
+test("cleanup removes render files abandoned for over an hour", () => {
+  const { env } = setup();
+  const dir = join(env.VOZ_HOME, "conversations", "t3-stale");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "state.json"), JSON.stringify({ active: false }));
+  const job = join(dir, "x.m4a.job.json");
+  writeFileSync(job, JSON.stringify({ reply: "texto viejo" }));
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  utimesSync(job, twoHoursAgo, twoHoursAgo);
+  run(["clean"], { env });
+  assert.equal(existsSync(dir), false);
+});
+
 test("two on calls in one sandboxed turn hand out the same audio path", () => {
   const { root, env } = setup();
   const spoolEnv = { ...env, VOZ_SPOOL: join(root, "spool"), CODEX_THREAD_ID: "c" };

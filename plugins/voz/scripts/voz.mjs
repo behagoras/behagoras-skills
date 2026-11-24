@@ -1,0 +1,589 @@
+#!/usr/bin/env node
+// voz: opt-in spoken summaries of agent replies for Claude Code, Codex, and Antigravity.
+// One script serves three roles: the CLI the `voz` skill runs, the hook entry point,
+// and the detached worker that summarizes a reply and renders it with macOS `say`.
+import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const HARNESSES = ["claude", "codex", "antigravity"];
+const SESSION_ENV = {
+  claude: "CLAUDE_CODE_SESSION_ID",
+  codex: "CODEX_THREAD_ID",
+  antigravity: "ANTIGRAVITY_CONVERSATION_ID",
+};
+const STALE_TURN_MS = 30 * 60 * 1000;
+const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
+const SUMMARIZER_TIMEOUT_MS = 90 * 1000;
+const AUDIO_LINE = /^!\[[^\]]*\]\([^)]*\.m4a\)\s*$/gm;
+
+const voiceHome = () => process.env.VOZ_HOME || join(homedir(), ".local", "share", "voz");
+const retentionDays = () => Number(process.env.VOZ_RETENTION_DAYS || 14);
+const conversationsDir = () => join(voiceHome(), "conversations");
+const conversationDir = (key) => join(conversationsDir(), key);
+const stateFile = (key) => join(conversationDir(key), "state.json");
+const indexFile = () => join(voiceHome(), "index.jsonl");
+const logFile = () => join(voiceHome(), "voz.log");
+
+function safeId(value) {
+  return String(value).replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120);
+}
+
+// A T3 Code thread keeps its id when the user switches provider, so keying on it
+// lets voice mode survive a handoff. Without T3, each agent session is its own key.
+export function conversationKey(harness, sessionId, env = process.env) {
+  if (env.T3CODE_THREAD_ID) return `t3-${safeId(env.T3CODE_THREAD_ID)}`;
+  if (sessionId) return `${harness}-${safeId(sessionId)}`;
+  return null;
+}
+
+function log(message) {
+  try {
+    mkdirSync(voiceHome(), { recursive: true });
+    appendFileSync(logFile(), `${new Date().toISOString()} ${message}\n`);
+  } catch {
+    // logging must never break a hook
+  }
+}
+
+function readJson(file, fallback) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(file, value) {
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(tmp, file);
+}
+
+const loadState = (key) => readJson(stateFile(key), null);
+const saveState = (key, state) => writeJson(stateFile(key), { ...state, updatedAt: Date.now() });
+
+// Agent sandboxes (Codex workspace-write, for example) let the CLI write only to the
+// project and temp folders. The CLI then leaves its change in a spool under /tmp,
+// and the next hook, which runs outside the sandbox, applies it.
+function spoolDirs() {
+  const uid = typeof process.getuid === "function" ? process.getuid() : "user";
+  return [process.env.VOZ_SPOOL || join("/tmp", `voz-${uid}`), join(tmpdir(), `voz-${uid}`)];
+}
+
+function changeState(key, patch) {
+  const next = { ...(loadState(key) || {}), ...patch };
+  try {
+    saveState(key, next);
+    return "saved";
+  } catch (error) {
+    if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
+  }
+  for (const dir of spoolDirs()) {
+    try {
+      writeJson(join(dir, `${key}.json`), { ...patch, requestedAt: Date.now() });
+      return "spooled";
+    } catch {
+      // try the next spool folder
+    }
+  }
+  throw new Error(`cannot write voice mode state for ${key}`);
+}
+
+function applySpool(key) {
+  for (const dir of spoolDirs()) {
+    const file = join(dir, `${key}.json`);
+    const patch = readJson(file, null);
+    if (!patch) continue;
+    const { requestedAt, ...rest } = patch;
+    saveState(key, { ...(loadState(key) || {}), ...rest });
+    rmSync(file, { force: true });
+  }
+}
+
+function newAudioPath(key) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  return join(conversationDir(key), `${stamp}-${randomBytes(3).toString("hex")}.m4a`);
+}
+
+export function audioInstruction(path) {
+  return [
+    "Voice mode (voz plugin) is on for this conversation.",
+    "The plugin creates the audio file below a few seconds after your reply ends; leave the file to it and keep this instruction out of your reply.",
+    "The last line of your reply must be exactly this line, alone:",
+    `![Audio](${path})`,
+  ].join("\n");
+}
+
+// ---------- hooks ----------
+
+function parseArgs(argv) {
+  const args = { _: [] };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg.startsWith("--")) {
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith("--")) args[arg.slice(2)] = true;
+      else {
+        args[arg.slice(2)] = next;
+        i += 1;
+      }
+    } else args._.push(arg);
+  }
+  return args;
+}
+
+function readStdin() {
+  try {
+    return JSON.parse(readFileSync(0, "utf8") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+// Each agent expects a different "nothing to do" answer on stdout.
+function emitNoop(harness, event) {
+  if (harness === "antigravity") process.stdout.write(event === "stop" ? '{"decision":"stop"}' : "{}");
+  if (harness === "codex" && event === "stop") process.stdout.write("{}");
+}
+
+function emitContext(harness, text) {
+  if (harness === "antigravity") {
+    process.stdout.write(JSON.stringify({ inject_steps: [{ system_message: { system_message: text } }] }));
+    return;
+  }
+  process.stdout.write(
+    JSON.stringify({ hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: text } }),
+  );
+}
+
+function sessionFromPayload(harness, payload) {
+  return harness === "antigravity" ? payload.conversationId : payload.session_id;
+}
+
+// Decides whether this agent session may act for the conversation.
+// Another session that fires while the owner's turn is open is an agent the owner
+// launched (for example `codex exec` from Claude Code) and stays quiet. Once the
+// owner's turn is closed, a new session is a provider switch and takes over.
+export function claimConversation(state, me, now = Date.now()) {
+  if (!state.owner || state.owner === me) return true;
+  const ownerBusy = state.turnOpen && now - (state.turnStartedAt || 0) < STALE_TURN_MS;
+  return !ownerBusy;
+}
+
+export function onPromptHook(harness, payload, env = process.env) {
+  if (harness === "antigravity" && Number(payload.invocationNum || 0) > 0) return null;
+  const sessionId = sessionFromPayload(harness, payload);
+  const key = conversationKey(harness, sessionId, env);
+  if (!key) return null;
+  applySpool(key);
+  const state = loadState(key);
+  if (!state?.active) return null;
+  const me = `${harness}:${sessionId}`;
+  if (!claimConversation(state, me)) return null;
+  const path = newAudioPath(key);
+  saveState(key, { ...state, owner: me, turnOpen: true, turnStartedAt: Date.now(), pending: path });
+  return audioInstruction(path);
+}
+
+export function onStopHook(harness, payload, env = process.env) {
+  const sessionId = sessionFromPayload(harness, payload);
+  const key = conversationKey(harness, sessionId, env);
+  if (!key) return null;
+  applySpool(key);
+  const state = loadState(key);
+  if (!state?.active) return null;
+  const me = `${harness}:${sessionId}`;
+  if (!claimConversation(state, me)) return null;
+  const pending = state.pending;
+  saveState(key, { ...state, owner: me, turnOpen: false, pending: null });
+  if (!pending) return null;
+
+  const reply = payload.last_assistant_message;
+  if (typeof reply === "string" && !reply.includes(pending)) {
+    log(`skip ${key}: the reply did not include its audio line`);
+    return null;
+  }
+  const job = {
+    key,
+    harness,
+    session: sessionId,
+    cwd: payload.cwd || (payload.workspacePaths || [])[0] || process.cwd(),
+    out: pending,
+    reply: typeof reply === "string" ? reply : null,
+    transcript: payload.transcriptPath || null,
+  };
+  const jobFile = `${pending}.job.json`;
+  writeJson(jobFile, job);
+  const child = spawn(process.execPath, [SCRIPT, "render", "--job", jobFile], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, VOZ_INNER: "1" },
+  });
+  child.unref();
+  pruneIfDue();
+  return job;
+}
+
+function runHook(event, harness) {
+  if (!HARNESSES.includes(harness)) return;
+  if (process.env.VOZ_DEBUG) log(`hook ${event} ${harness}${process.env.VOZ_INNER ? " (inner)" : ""}`);
+  if (process.env.VOZ_INNER) return emitNoop(harness, event);
+  const payload = readStdin();
+  try {
+    if (event === "prompt") {
+      const text = onPromptHook(harness, payload);
+      return text ? emitContext(harness, text) : emitNoop(harness, event);
+    }
+    if (event === "stop") onStopHook(harness, payload);
+  } catch (error) {
+    log(`hook ${event} ${harness} failed: ${error?.stack || error}`);
+  }
+  emitNoop(harness, event);
+}
+
+// ---------- worker ----------
+
+export function plainText(markdown) {
+  const text = markdown
+    .replace(AUDIO_LINE, "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|.*\|\s*$/gm, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/^#+\s*/gm, "")
+    .replace(/[*_>#]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= 1500) return text;
+  const cut = text.slice(0, 1500);
+  const end = cut.lastIndexOf(". ");
+  return end > 500 ? cut.slice(0, end + 1) : cut;
+}
+
+export function summaryPrompt(reply) {
+  return [
+    "Rewrite the assistant reply below as a short script for a text-to-speech voice.",
+    "- Write in the same language as the reply.",
+    "- Use at most 120 words of plain sentences.",
+    "- Keep decisions, results, numbers, and any question for the listener.",
+    "- Leave out code, tables, file paths, URLs, and Markdown.",
+    "- Output only the script.",
+    "",
+    "<reply>",
+    reply,
+    "</reply>",
+  ].join("\n");
+}
+
+// Cheap model per agent, chosen by the user: Haiku, Luna, and Gemini Neon Low.
+function summarizerCommand(harness, prompt, outFile) {
+  if (harness === "claude") {
+    return {
+      bin: "claude",
+      args: ["-p", "--model", "haiku", "--effort", "medium", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"],
+      input: prompt,
+    };
+  }
+  if (harness === "codex") {
+    return {
+      bin: "codex",
+      args: ["exec", "-m", "gpt-6-luna", "-c", "model_reasoning_effort=medium", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-o", outFile, "-"],
+      input: prompt,
+      readOut: true,
+    };
+  }
+  return {
+    bin: "agy",
+    args: ["--model", "gemini-4-neon-low", "--print-timeout", "80s", "-p", prompt],
+    input: "",
+  };
+}
+
+function summarize(harness, reply, workDir) {
+  const outFile = join(workDir, `summary-${process.pid}.txt`);
+  const command = summarizerCommand(harness, summaryPrompt(reply), outFile);
+  const result = spawnSync(command.bin, command.args, {
+    input: command.input,
+    cwd: tmpdir(),
+    encoding: "utf8",
+    timeout: SUMMARIZER_TIMEOUT_MS,
+    env: { ...process.env, VOZ_INNER: "1" },
+  });
+  let text = command.readOut ? readFileSafe(outFile) : result.stdout;
+  rmSync(outFile, { force: true });
+  text = (text || "").trim();
+  if (result.status !== 0 || !text) {
+    log(`summarizer ${command.bin} failed (status ${result.status}): ${(result.stderr || result.error || "").toString().slice(0, 300)}`);
+    return null;
+  }
+  return text;
+}
+
+function readFileSafe(file) {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return "";
+  }
+}
+
+// Antigravity does not pass the reply to its Stop hook, so the worker reads the
+// last model step from the transcript. It can lag a moment behind the hook.
+export function lastReplyFromTranscript(file) {
+  const lines = readFileSafe(file).trim().split("\n").reverse();
+  for (const line of lines) {
+    try {
+      const step = JSON.parse(line);
+      if (step.source === "MODEL" && step.type === "PLANNER_RESPONSE" && step.content) return step.content;
+    } catch {
+      // skip partial lines
+    }
+  }
+  return null;
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function render(jobFile) {
+  const job = readJson(jobFile, null);
+  if (!job) return;
+  const started = Date.now();
+  try {
+    let reply = job.reply;
+    for (let attempt = 0; !reply && job.transcript && attempt < 10; attempt += 1) {
+      const candidate = lastReplyFromTranscript(job.transcript);
+      if (candidate?.includes(job.out)) reply = candidate;
+      else sleep(1000);
+    }
+    if (!reply) return log(`render ${job.key}: no reply text found`);
+    if (!reply.includes(job.out)) return log(`skip ${job.key}: the reply did not include its audio line`);
+
+    const workDir = dirname(job.out);
+    const cleaned = reply.replace(AUDIO_LINE, "").trim();
+    let script = summarize(job.harness, cleaned, workDir);
+    const summarizer = script ? job.harness : "fallback";
+    script ||= plainText(cleaned);
+
+    const textFile = `${job.out}.txt`;
+    const tmpAudio = `${job.out}.part.m4a`;
+    writeFileSync(textFile, script);
+    const say = spawnSync(
+      process.env.VOZ_SAY || "say",
+      ["-v", process.env.VOZ_VOICE || "Paulina", "-r", process.env.VOZ_RATE || "185", "-f", textFile, "-o", tmpAudio, "--file-format=m4af", "--data-format=aac"],
+      { encoding: "utf8", timeout: 120 * 1000 },
+    );
+    rmSync(textFile, { force: true });
+    if (say.status !== 0 || !existsSync(tmpAudio)) {
+      rmSync(tmpAudio, { force: true });
+      return log(`say failed for ${job.key}: ${(say.stderr || say.error || "").toString().slice(0, 300)}`);
+    }
+    renameSync(tmpAudio, job.out);
+    appendFileSync(
+      indexFile(),
+      `${JSON.stringify({
+        createdAt: new Date().toISOString(),
+        conversation: job.key,
+        harness: job.harness,
+        session: job.session,
+        cwd: job.cwd,
+        file: job.out,
+        summarizer,
+        seconds: Math.round((Date.now() - started) / 1000),
+      })}\n`,
+    );
+  } finally {
+    rmSync(jobFile, { force: true });
+  }
+}
+
+// ---------- cleanup ----------
+
+function audioFiles() {
+  if (!existsSync(conversationsDir())) return [];
+  return readdirSync(conversationsDir()).flatMap((key) => {
+    const dir = conversationDir(key);
+    return readdirSync(dir)
+      .filter((name) => name.endsWith(".m4a") && !name.endsWith(".part.m4a"))
+      .map((name) => {
+        const file = join(dir, name);
+        const stats = statSync(file);
+        return { key, file, bytes: stats.size, mtime: stats.mtimeMs };
+      });
+  });
+}
+
+export function clean({ days, key, all } = {}) {
+  const cutoff = Date.now() - (days ?? retentionDays()) * 24 * 60 * 60 * 1000;
+  const doomed = audioFiles().filter((a) => all || (key ? a.key === key : a.mtime < cutoff));
+  for (const audio of doomed) rmSync(audio.file, { force: true });
+
+  // Drop conversation folders with no audio left that are off, or on but idle past retention.
+  if (existsSync(conversationsDir())) {
+    for (const name of readdirSync(conversationsDir())) {
+      const dir = conversationDir(name);
+      const hasAudio = readdirSync(dir).some((f) => f.endsWith(".m4a"));
+      const state = loadState(name);
+      if (!hasAudio && (!state?.active || (state.updatedAt || 0) < cutoff)) rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const kept = readFileSafe(indexFile())
+    .split("\n")
+    .filter((line) => {
+      try {
+        return existsSync(JSON.parse(line).file);
+      } catch {
+        return false;
+      }
+    });
+  if (existsSync(indexFile())) writeFileSync(indexFile(), kept.length ? `${kept.join("\n")}\n` : "");
+  return { files: doomed.length, bytes: doomed.reduce((sum, a) => sum + a.bytes, 0) };
+}
+
+function pruneIfDue() {
+  const stamp = join(voiceHome(), ".last-prune");
+  try {
+    if (existsSync(stamp) && Date.now() - statSync(stamp).mtimeMs < PRUNE_EVERY_MS) return;
+    clean({});
+    writeFileSync(stamp, "");
+    utimesSync(stamp, new Date(), new Date());
+  } catch (error) {
+    log(`prune failed: ${error?.message || error}`);
+  }
+}
+
+// ---------- CLI ----------
+
+function cliSession(args) {
+  const harness = HARNESSES.includes(args.harness) ? args.harness : null;
+  const sessionId = harness ? process.env[SESSION_ENV[harness]] : null;
+  return { key: conversationKey(harness, sessionId), owner: sessionId ? `${harness}:${sessionId}` : null };
+}
+
+const cliKey = (args) => cliSession(args).key;
+
+const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+function handoffNote(key) {
+  return key.startsWith("t3-")
+    ? "In T3 Code it follows this thread through a provider switch (handoff), in every agent that has the voz plugin installed: Claude Code, Codex, or Antigravity."
+    : "It applies to this conversation only. In T3 Code, voice mode also follows the thread through a provider switch.";
+}
+
+function cli(argv) {
+  const args = parseArgs(argv);
+  const [command] = args._;
+
+  if (command === "hook") return runHook(args._[1], args.harness);
+  if (command === "render") return render(args.job);
+
+  if (command === "on" || command === "off" || command === "status") {
+    const { key, owner } = cliSession(args);
+    if (!key) {
+      console.log("Could not identify this conversation. Run this from inside the agent and pass --harness claude, codex, or antigravity.");
+      process.exitCode = 1;
+      return;
+    }
+    const state = loadState(key) || {};
+    const spoolNote = (how) => (how === "spooled" ? " The agent sandbox blocked the state folder, so the change applies when this reply ends." : "");
+    if (command === "on") {
+      // The prompt hook already ran inactive for this turn, so the CLI hands out
+      // this turn's audio path. With no known session id, the Stop hook claims it.
+      const path = newAudioPath(key);
+      const how = changeState(key, { active: true, activatedAt: Date.now(), owner, turnOpen: true, turnStartedAt: Date.now(), pending: path });
+      console.log(
+        [
+          `Voice mode is on (conversation ${key}).${spoolNote(how)}`,
+          "Tell the user, in their language:",
+          "- Each reply now ends with an audio summary that appears a few seconds after the text.",
+          `- ${handoffNote(key)}`,
+          `- Audio is kept for ${retentionDays()} days in ${voiceHome()}; ask to turn voice mode off, or to clean the audio, at any time.`,
+          "",
+          audioInstruction(path),
+        ].join("\n"),
+      );
+      return;
+    }
+    if (command === "off") {
+      const how = changeState(key, { active: false, pending: null, turnOpen: false });
+      console.log(`Voice mode is off (conversation ${key}).${spoolNote(how)} Its audio stays until cleanup after ${retentionDays()} days; run "clean --current" to delete it now.`);
+      return;
+    }
+    const mine = audioFiles().filter((a) => a.key === key);
+    console.log(
+      `Voice mode is ${state.active ? "on" : "off"} (conversation ${key}). ${mine.length} audio files, ${mb(mine.reduce((s, a) => s + a.bytes, 0))}, in ${conversationDir(key)}.`,
+    );
+    return;
+  }
+
+  if (command === "clean") {
+    const key = args.current ? cliKey(args) : args.conversation ? safeId(args.conversation) : undefined;
+    if (args.current && !key) {
+      console.log("Could not identify this conversation; pass --harness.");
+      process.exitCode = 1;
+      return;
+    }
+    const days = args.days === undefined ? undefined : Number(args.days);
+    try {
+      const result = clean({ days, key, all: Boolean(args.all) });
+      console.log(`Deleted ${result.files} audio files (${mb(result.bytes)}).`);
+    } catch (error) {
+      if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
+      console.log(`The agent sandbox blocked deleting files in ${voiceHome()}. Ask the user to approve running this command outside the sandbox.`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "list") {
+    const byKey = new Map();
+    for (const audio of audioFiles()) {
+      const entry = byKey.get(audio.key) || { files: 0, bytes: 0, last: 0 };
+      entry.files += 1;
+      entry.bytes += audio.bytes;
+      entry.last = Math.max(entry.last, audio.mtime);
+      byKey.set(audio.key, entry);
+    }
+    if (!byKey.size) return console.log(`No audio in ${voiceHome()}.`);
+    for (const [key, entry] of byKey) {
+      const active = loadState(key)?.active ? "on " : "off";
+      console.log(`${active} ${key}  ${entry.files} files  ${mb(entry.bytes)}  last ${new Date(entry.last).toISOString().slice(0, 16)}`);
+    }
+    return;
+  }
+
+  console.log(
+    [
+      "Usage: voz.mjs <command> [--harness claude|codex|antigravity]",
+      "  on | off | status     Turn voice mode on or off for this conversation, or show it.",
+      "  list                  Show every conversation that has audio.",
+      "  clean                 Delete audio older than the retention period (default 14 days).",
+      "  clean --days N        Delete audio older than N days.",
+      "  clean --current       Delete this conversation's audio.",
+      "  clean --conversation K  Delete one conversation's audio.",
+      "  clean --all           Delete all audio.",
+    ].join("\n"),
+  );
+}
+
+if (process.argv[1] === SCRIPT) cli(process.argv.slice(2));

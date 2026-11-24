@@ -1,0 +1,14 @@
+{
+  "name": "voz",
+  "displayName": "Voz",
+  "version": "0.1.0",
+  "description": "Opt-in voice mode: each reply ends with a spoken summary made by a cheap model and macOS say.",
+  "author": {
+    "name": "behagoras",
+    "url": "https://github.com/behagoras"
+  },
+  "homepage": "https://github.com/behagoras/behagoras-skills/tree/main/plugins/voz",
+  "repository": "https://github.com/behagoras/behagoras-skills",
+  "license": "MIT",
+  "keywords": ["claude-code", "voice", "tts", "t3-code"]
+}

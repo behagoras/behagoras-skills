@@ -123,6 +123,7 @@ test("Antigravity injects a system message once per turn and reads the reply fro
     [
       JSON.stringify({ source: "USER_EXPLICIT", type: "USER_INPUT", content: "hola" }),
       JSON.stringify({ source: "MODEL", type: "PLANNER_RESPONSE", content: `Hola.\n![Audio](${path})` }),
+      JSON.stringify({ source: "MODEL", type: "PLANNER_RESPONSE", content: "Una respuesta más nueva." }),
     ].join("\n"),
   );
   assert.equal(hook("stop", "antigravity", { conversationId: "g", transcriptPath: transcript }, env), '{"decision":"stop"}');
@@ -141,7 +142,7 @@ test("a reply without its audio line renders nothing", () => {
 test("a failed summarizer falls back to the reply's plain text", () => {
   const { env } = setup();
   const failEnv = { ...env, FAKE_FAIL: "1" };
-  const path = pathFrom(run(["on", "--harness", "claude"], { env: failEnv }));
+  const path = pathFrom(run(["on", "--harness", "claude"], { env: { ...failEnv, CLAUDE_CODE_SESSION_ID: "a" } }));
   hook("stop", "claude", { session_id: "a", last_assistant_message: `## Resultado\nTodo **bien**.\n\`\`\`js\ncode()\n\`\`\`\n![Audio](${path})` }, failEnv);
   assert.ok(waitFor(path));
   assert.equal(readFileSync(path, "utf8").trim(), "Resultado Todo bien.");
@@ -163,16 +164,49 @@ test("inside a sandbox, on goes through the spool and the Stop hook applies it",
   assert.deepEqual(readdirSync(spoolEnv.VOZ_SPOOL), []);
 });
 
+test("on needs the agent's session, and a repeated on keeps the turn's audio path", () => {
+  const { env } = setup();
+  const bare = spawnSync(process.execPath, [script, "on"], { encoding: "utf8", env });
+  assert.equal(bare.status, 1);
+  assert.match(bare.stdout, /Pass --harness/);
+  const sessionEnv = { ...env, CLAUDE_CODE_SESSION_ID: "a" };
+  const first = pathFrom(run(["on", "--harness", "claude"], { env: sessionEnv }));
+  assert.equal(pathFrom(run(["on", "--harness", "claude"], { env: sessionEnv })), first);
+});
+
+test("a spool folder other users can write to is ignored", () => {
+  const { root, env } = setup();
+  const spool = join(root, "spool");
+  mkdirSync(spool);
+  chmodSync(spool, 0o777);
+  writeFileSync(join(spool, "t3-thread-1.json"), JSON.stringify({ active: true, owner: "claude:x" }));
+  const spoolEnv = { ...env, VOZ_SPOOL: spool, TMPDIR: join(root, "none") };
+  assert.equal(hook("prompt", "claude", { session_id: "x", prompt: "hola" }, spoolEnv), "");
+  assert.equal(existsSync(join(env.VOZ_HOME, "conversations")), false);
+});
+
+test("Stop prunes expired audio even while voice mode is off", () => {
+  const { env } = setup();
+  const dir = join(env.VOZ_HOME, "conversations", "t3-old");
+  mkdirSync(dir, { recursive: true });
+  const old = join(dir, "a.m4a");
+  writeFileSync(old, "x");
+  const longAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
+  utimesSync(old, longAgo, longAgo);
+  hook("stop", "claude", { session_id: "z", last_assistant_message: "hola" }, env);
+  assert.equal(existsSync(old), false);
+});
+
 test("off stops the prompt hook from asking for audio", () => {
   const { env } = setup();
-  run(["on", "--harness", "claude"], { env });
-  run(["off", "--harness", "claude"], { env });
+  run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
+  run(["off", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
   assert.equal(hook("prompt", "claude", { session_id: "a", prompt: "hola" }, env), "");
 });
 
 test("agents launched by the summarizer never run the hooks", () => {
   const { env } = setup();
-  run(["on", "--harness", "claude"], { env });
+  run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } });
   assert.equal(hook("prompt", "claude", { session_id: "a", prompt: "hola" }, { ...env, VOZ_INNER: "1" }), "");
 });
 
@@ -198,7 +232,7 @@ test("clean deletes audio by age, by conversation, and drops empty idle folders"
 
 test("status and list describe the stored audio", () => {
   const { env } = setup();
-  const path = pathFrom(run(["on", "--harness", "claude"], { env }));
+  const path = pathFrom(run(["on", "--harness", "claude"], { env: { ...env, CLAUDE_CODE_SESSION_ID: "a" } }));
   hook("stop", "claude", { session_id: "a", last_assistant_message: `ok\n![Audio](${path})` }, env);
   assert.ok(waitFor(path));
   assert.match(run(["status", "--harness", "claude"], { env }), /Voice mode is on .* 1 audio files/);

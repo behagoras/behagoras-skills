@@ -60,11 +60,13 @@ If the summary model fails or takes more than 90 seconds, the worker reads the r
 
 Inside T3 Code, the plugin keys voice mode on `T3CODE_THREAD_ID`. A T3 thread keeps that id when you switch provider, so voice mode stays on after a handoff from Claude Code to Codex or Antigravity. Outside T3 Code, the key is the agent's own session id.
 
-An agent that another agent starts during its turn, such as `codex exec` run from Claude Code, inherits the thread id. While the owning session's turn is open, the hooks of every other session in the same thread do nothing. Once that turn ends, the next session to start a turn becomes the owner. That is what a handoff looks like. The summary models run with `VOZ_INNER=1`, which turns every `voz` hook into a no-op.
+An agent that another agent starts during its turn, such as `codex exec` run from Claude Code, inherits the thread id. While the owning session's turn is open, the hooks of every other session in the same thread do nothing. Once that turn ends, the next session to start a turn becomes the owner. That is what a handoff looks like. A turn that never reaches its end, such as an interrupted one, releases the thread after 12 hours. Asking to turn voice mode on again moves it to the current agent at once.
+
+The summary models run with `VOZ_INNER=1`, which turns every `voz` hook into a no-op. They also run without tools where the CLI allows it. Claude runs with `--tools ""`. Codex runs in a read-only sandbox without network. Antigravity runs in print mode, where no one can approve a tool.
 
 ### Sandboxes
 
-Codex runs commands in a sandbox that can only write to the project and temp folders. When `voz.mjs on` or `off` cannot write the state folder, it leaves the change in `/tmp/voz-<uid>/`. The next hook runs outside the sandbox and applies the change when the reply ends.
+Codex runs commands in a sandbox that can only write to the project and temp folders. When `voz.mjs on` or `off` cannot write the state folder, it leaves the change in `/tmp/voz-<uid>/`, a folder only you can write to. The next hook runs outside the sandbox and applies the change when the reply ends.
 
 ## Storage and cleanup
 

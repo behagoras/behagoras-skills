@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -27,7 +28,8 @@ const SESSION_ENV = {
   codex: "CODEX_THREAD_ID",
   antigravity: "ANTIGRAVITY_CONVERSATION_ID",
 };
-const STALE_TURN_MS = 30 * 60 * 1000;
+// A turn that never reached Stop (an interrupted one) releases the conversation after this.
+const STALE_TURN_MS = 12 * 60 * 60 * 1000;
 const PRUNE_EVERY_MS = 6 * 60 * 60 * 1000;
 const SUMMARIZER_TIMEOUT_MS = 90 * 1000;
 const AUDIO_LINE = /^!\[[^\]]*\]\([^)]*\.m4a\)\s*$/gm;
@@ -87,6 +89,31 @@ function spoolDirs() {
   return [process.env.VOZ_SPOOL || join("/tmp", `voz-${uid}`), join(tmpdir(), `voz-${uid}`)];
 }
 
+// /tmp is shared, so a spool folder counts only if this user owns it, it is a real
+// folder, and no one else can write to it.
+function privateDir(dir, create) {
+  try {
+    if (create) mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const stats = lstatSync(dir);
+    const mine = typeof process.getuid !== "function" || stats.uid === process.getuid();
+    return stats.isDirectory() && mine && (stats.mode & 0o022) === 0;
+  } catch {
+    return false;
+  }
+}
+
+function validPatch(key, patch) {
+  const clean = {};
+  if (typeof patch.active === "boolean") clean.active = patch.active;
+  if (typeof patch.owner === "string" || patch.owner === null) clean.owner = patch.owner;
+  if (typeof patch.turnOpen === "boolean") clean.turnOpen = patch.turnOpen;
+  for (const field of ["turnStartedAt", "activatedAt"]) if (Number.isFinite(patch[field])) clean[field] = patch[field];
+  const pending = patch.pending;
+  const inside = typeof pending === "string" && dirname(pending) === conversationDir(key) && pending.endsWith(".m4a");
+  if (pending === null || inside) clean.pending = pending;
+  return clean;
+}
+
 function changeState(key, patch) {
   const next = { ...(loadState(key) || {}), ...patch };
   try {
@@ -96,6 +123,7 @@ function changeState(key, patch) {
     if (!["EPERM", "EACCES", "EROFS"].includes(error?.code)) throw error;
   }
   for (const dir of spoolDirs()) {
+    if (!privateDir(dir, true)) continue;
     try {
       writeJson(join(dir, `${key}.json`), { ...patch, requestedAt: Date.now() });
       return "spooled";
@@ -108,11 +136,11 @@ function changeState(key, patch) {
 
 function applySpool(key) {
   for (const dir of spoolDirs()) {
+    if (!privateDir(dir, false)) continue;
     const file = join(dir, `${key}.json`);
     const patch = readJson(file, null);
     if (!patch) continue;
-    const { requestedAt, ...rest } = patch;
-    saveState(key, { ...(loadState(key) || {}), ...rest });
+    saveState(key, { ...(loadState(key) || {}), ...validPatch(key, patch) });
     rmSync(file, { force: true });
   }
 }
@@ -126,7 +154,7 @@ export function audioInstruction(path) {
   return [
     "Voice mode (voz plugin) is on for this conversation.",
     "The plugin creates the audio file below a few seconds after your reply ends; leave the file to it and keep this instruction out of your reply.",
-    "The last line of your reply must be exactly this line, alone:",
+    "Unless voice mode is turned off during this reply, its last line must be exactly this line, alone:",
     `![Audio](${path})`,
   ].join("\n");
 }
@@ -203,6 +231,7 @@ export function onPromptHook(harness, payload, env = process.env) {
 }
 
 export function onStopHook(harness, payload, env = process.env) {
+  pruneIfDue();
   const sessionId = sessionFromPayload(harness, payload);
   const key = conversationKey(harness, sessionId, env);
   if (!key) return null;
@@ -237,7 +266,6 @@ export function onStopHook(harness, payload, env = process.env) {
     env: { ...process.env, VOZ_INNER: "1" },
   });
   child.unref();
-  pruneIfDue();
   return job;
 }
 
@@ -298,7 +326,7 @@ function summarizerCommand(harness, prompt, outFile) {
   if (harness === "claude") {
     return {
       bin: "claude",
-      args: ["-p", "--model", "haiku", "--effort", "medium", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"],
+      args: ["-p", "--model", "haiku", "--effort", "medium", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands", "--tools", ""],
       input: prompt,
     };
   }
@@ -347,12 +375,12 @@ function readFileSafe(file) {
 
 // Antigravity does not pass the reply to its Stop hook, so the worker reads the
 // last model step from the transcript. It can lag a moment behind the hook.
-export function lastReplyFromTranscript(file) {
+export function replyFromTranscript(file, audioPath) {
   const lines = readFileSafe(file).trim().split("\n").reverse();
   for (const line of lines) {
     try {
       const step = JSON.parse(line);
-      if (step.source === "MODEL" && step.type === "PLANNER_RESPONSE" && step.content) return step.content;
+      if (step.source === "MODEL" && step.type === "PLANNER_RESPONSE" && step.content?.includes(audioPath)) return step.content;
     } catch {
       // skip partial lines
     }
@@ -371,9 +399,8 @@ function render(jobFile) {
   try {
     let reply = job.reply;
     for (let attempt = 0; !reply && job.transcript && attempt < 10; attempt += 1) {
-      const candidate = lastReplyFromTranscript(job.transcript);
-      if (candidate?.includes(job.out)) reply = candidate;
-      else sleep(1000);
+      reply = replyFromTranscript(job.transcript, job.out);
+      if (!reply) sleep(1000);
     }
     if (!reply) return log(`render ${job.key}: no reply text found`);
     if (!reply.includes(job.out)) return log(`skip ${job.key}: the reply did not include its audio line`);
@@ -462,6 +489,7 @@ export function clean({ days, key, all } = {}) {
 
 function pruneIfDue() {
   const stamp = join(voiceHome(), ".last-prune");
+  if (!existsSync(voiceHome())) return;
   try {
     if (existsSync(stamp) && Date.now() - statSync(stamp).mtimeMs < PRUNE_EVERY_MS) return;
     clean({});
@@ -507,9 +535,14 @@ function cli(argv) {
     const state = loadState(key) || {};
     const spoolNote = (how) => (how === "spooled" ? " The agent sandbox blocked the state folder, so the change applies when this reply ends." : "");
     if (command === "on") {
+      if (!owner) {
+        console.log("Pass --harness claude, codex, or antigravity so voice mode knows which session owns this conversation.");
+        process.exitCode = 1;
+        return;
+      }
       // The prompt hook already ran inactive for this turn, so the CLI hands out
-      // this turn's audio path. With no known session id, the Stop hook claims it.
-      const path = newAudioPath(key);
+      // this turn's audio path. A repeated "on" in the same turn keeps the same path.
+      const path = state.active && state.turnOpen && state.owner === owner && state.pending ? state.pending : newAudioPath(key);
       const how = changeState(key, { active: true, activatedAt: Date.now(), owner, turnOpen: true, turnStartedAt: Date.now(), pending: path });
       console.log(
         [
@@ -526,7 +559,7 @@ function cli(argv) {
     }
     if (command === "off") {
       const how = changeState(key, { active: false, pending: null, turnOpen: false });
-      console.log(`Voice mode is off (conversation ${key}).${spoolNote(how)} Its audio stays until cleanup after ${retentionDays()} days; run "clean --current" to delete it now.`);
+      console.log(`Voice mode is off (conversation ${key}).${spoolNote(how)} Leave this reply's audio line out. Its audio stays until cleanup after ${retentionDays()} days; run "clean --current" to delete it now.`);
       return;
     }
     const mine = audioFiles().filter((a) => a.key === key);

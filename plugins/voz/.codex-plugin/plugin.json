@@ -1,7 +1,7 @@
 {
   "name": "voz",
-  "version": "0.1.0",
-  "description": "Opt-in voice mode: each reply ends with a spoken summary made by a cheap model and macOS say.",
+  "version": "0.1.1",
+  "description": "Opt-in voice mode: each reply ends with an audio version read by macOS say, summarized by Haiku in Claude Code.",
   "author": {
     "name": "behagoras",
     "url": "https://github.com/behagoras"
@@ -15,7 +15,7 @@
   "interface": {
     "displayName": "Voz",
     "shortDescription": "Spoken summaries of replies, off until you ask.",
-    "longDescription": "Ask Codex to turn voice mode on. Each reply then ends with an audio summary written by gpt-6-luna and read by macOS say. Audio is stored in ~/.local/share/voz and deleted after 14 days.",
+    "longDescription": "Ask Codex to turn voice mode on. Each reply then ends with an audio version of its plain text, read by macOS say. Audio is stored in ~/.local/share/voz and deleted after 14 days.",
     "developerName": "behagoras",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],

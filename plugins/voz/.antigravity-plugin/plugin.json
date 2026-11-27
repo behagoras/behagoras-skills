@@ -1,5 +1,5 @@
 {
   "name": "voz",
-  "version": "0.1.0",
-  "description": "Opt-in voice mode: each reply ends with a spoken summary made by a cheap model and macOS say."
+  "version": "0.1.1",
+  "description": "Opt-in voice mode: each reply ends with an audio version read by macOS say, summarized by Haiku in Claude Code."
 }

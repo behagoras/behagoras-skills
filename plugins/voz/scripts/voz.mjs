@@ -441,45 +441,25 @@ export function summaryPrompt(reply) {
   ].join("\n");
 }
 
-// Cheap model per agent, chosen by the user: Haiku, Luna, and Gemini Neon Low.
-function summarizerCommand(harness, prompt, outFile) {
-  if (harness === "claude") {
-    return {
-      bin: "claude",
-      args: ["-p", "--model", "haiku", "--effort", "medium", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands", "--tools", ""],
-      input: prompt,
-    };
-  }
-  if (harness === "codex") {
-    return {
-      bin: "codex",
-      args: ["exec", "--ignore-user-config", "-m", "gpt-6-luna", "-c", "model_reasoning_effort=medium", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-o", outFile, "-"],
-      input: prompt,
-      readOut: true,
-    };
-  }
-  return {
-    bin: "agy",
-    args: ["--model", "gemini-4-neon-low", "--print-timeout", "80s", "-p", prompt],
-    input: "",
-  };
-}
-
-function summarize(harness, reply, workDir) {
-  const outFile = join(workDir, `summary-${process.pid}.txt`);
-  const command = summarizerCommand(harness, summaryPrompt(reply), outFile);
-  const result = spawnSync(command.bin, command.args, {
-    input: command.input,
-    cwd: tmpdir(),
-    encoding: "utf8",
-    timeout: SUMMARIZER_TIMEOUT_MS,
-    env: { ...process.env, VOZ_INNER: "1" },
-  });
-  let text = command.readOut ? readFileSafe(outFile) : result.stdout;
-  rmSync(outFile, { force: true });
-  text = (text || "").trim();
+// Only Claude Code replies get a model-written summary: Haiku runs with no tools.
+// Codex and Antigravity cannot turn their summarizer's tools off, so their audio
+// reads the reply's plain text instead.
+function summarize(harness, reply) {
+  if (harness !== "claude") return null;
+  const result = spawnSync(
+    "claude",
+    ["-p", "--model", "haiku", "--effort", "medium", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands", "--tools", ""],
+    {
+      input: summaryPrompt(reply),
+      cwd: tmpdir(),
+      encoding: "utf8",
+      timeout: SUMMARIZER_TIMEOUT_MS,
+      env: { ...process.env, VOZ_INNER: "1" },
+    },
+  );
+  const text = (result.stdout || "").trim();
   if (result.status !== 0 || !text) {
-    log(`summarizer ${command.bin} failed (status ${result.status}): ${(result.stderr || result.error || "").toString().slice(0, 300)}`);
+    log(`summarizer claude failed (status ${result.status}): ${(result.stderr || result.error || "").toString().slice(0, 300)}`);
     return null;
   }
   return text;
@@ -525,10 +505,9 @@ function render(jobFile) {
     if (!reply) return log(`render ${job.key}: no reply text found`);
     if (!reply.includes(job.out)) return log(`skip ${job.key}: the reply did not include its audio line`);
 
-    const workDir = dirname(job.out);
     const cleaned = reply.replace(AUDIO_LINE, "").trim();
-    let script = summarize(job.harness, cleaned, workDir);
-    const summarizer = script ? job.harness : "fallback";
+    let script = summarize(job.harness, cleaned);
+    const summarizer = script ? "haiku" : "plain";
     script ||= plainText(cleaned);
 
     const textFile = `${job.out}.txt`;

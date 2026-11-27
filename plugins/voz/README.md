@@ -1,6 +1,6 @@
 # Voz
 
-Voice mode for Claude Code, Codex, and Antigravity. When it is on, each reply ends with an audio summary. A cheap model rewrites the reply as a short spoken script, and macOS `say` reads the script into an `.m4a` file. T3 Code shows the file as an audio player under the reply, about 10 seconds after the text.
+Voice mode for Claude Code, Codex, and Antigravity. When it is on, each reply ends with an audio version, which macOS `say` reads into an `.m4a` file. In Claude Code, Haiku first rewrites the reply as a short spoken script. In Codex and Antigravity, the audio reads the reply's plain text. T3 Code shows the file as an audio player under the reply, about 10 seconds after the text.
 
 Voice mode is off until you ask for it, and it covers one conversation.
 
@@ -46,15 +46,17 @@ The plugin has a skill, two hooks, and one Node script, `scripts/voz.mjs`.
 1. The skill runs `voz.mjs on`. The script records that voice mode is on and gives the agent this reply's audio path.
 2. Before each later turn, a hook gives the agent a new audio path and asks it to end the reply with that path as a Markdown image line.
 3. After each turn, a hook checks that the reply holds the path. It then starts a background worker and returns at once.
-4. The worker asks the cheap model for a spoken script of at most 120 words, in the reply's language. It writes the audio with `say` and adds a line to `index.jsonl`.
+4. In Claude Code, the worker asks Haiku for a spoken script of at most 120 words, in the reply's language. In Codex and Antigravity, it uses the reply's plain text. It writes the audio with `say` and adds a line to `index.jsonl`.
 
-| Agent | Before the turn | After the turn | Summary model |
+| Agent | Before the turn | After the turn | Audio text |
 |---|---|---|---|
-| Claude Code | `UserPromptSubmit` | `Stop`, which receives the reply | Haiku, medium effort |
-| Codex | `UserPromptSubmit` | `Stop`, which receives the reply | `gpt-6-luna`, medium effort |
-| Antigravity | `PreInvocation`, first invocation of the turn | `Stop`; the worker reads the reply from the transcript | `gemini-4-neon-low` |
+| Claude Code | `UserPromptSubmit` | `Stop`, which receives the reply | Haiku summary, medium effort, no tools |
+| Codex | `UserPromptSubmit` | `Stop`, which receives the reply | Plain text of the reply |
+| Antigravity | `PreInvocation`, first invocation of the turn | `Stop`; the worker reads the reply from the transcript | Plain text of the reply |
 
-If the summary model fails or takes more than 90 seconds, the worker reads the reply's plain text instead. It drops code, tables, and links, and stops at about 1,500 characters.
+Plain text drops code, tables, and links, and stops at about 1,500 characters. Claude Code also falls back to it when Haiku fails or takes more than 90 seconds.
+
+Codex and Antigravity have no way to turn off their tools in a summarizer run, so a model could act on instructions quoted in a reply. Their audio skips the model.
 
 ### One conversation, several agents
 
@@ -62,7 +64,7 @@ Inside T3 Code, the plugin keys voice mode on `T3CODE_THREAD_ID`. A T3 thread ke
 
 An agent that another agent starts, such as `codex exec` run from Claude Code, inherits the thread id. The hooks tell the two apart by process: each turn records the process id of the agent that owns the conversation. A session whose process descends from the owner's process was started by the owner, so its hooks do nothing. Any other session is a provider switch, or the owner has exited, so it takes over. This also covers a turn you interrupt and then hand off.
 
-The summary models run with `VOZ_INNER=1`, which turns every `voz` hook into a no-op. They also run without tools where the CLI allows it. Claude runs with `--tools ""`. Codex runs with `--ignore-user-config`, so none of your MCP servers, apps, or plugins load, in a read-only sandbox without network. Antigravity runs in print mode, where no one can approve a tool.
+The Haiku summarizer runs with `VOZ_INNER=1`, which turns every `voz` hook into a no-op, and with `--tools ""`, so it has no tools.
 
 ### Sandboxes
 
@@ -107,7 +109,7 @@ node plugins/voz/scripts/voz.mjs clean --all                  # everything
 
 - macOS, for `say`.
 - Node.js 18 or later.
-- The agent's own CLI on `PATH` to write summaries: `claude`, `codex`, or `agy`. Without it, the audio reads the reply's plain text.
+- For Claude Code summaries, `claude` on `PATH`. Without it, the audio reads the reply's plain text.
 
 ## Tests
 

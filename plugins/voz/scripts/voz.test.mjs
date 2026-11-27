@@ -9,11 +9,10 @@ import { fileURLToPath } from "node:url";
 const script = join(dirname(fileURLToPath(import.meta.url)), "voz.mjs");
 
 // Fake `say` copies its text into the audio file, so a test can read what was spoken.
+// Only Claude Code uses a summarizer; Codex and Antigravity audio reads plain text.
 const FAKES = {
   say: '#!/bin/sh\nwhile [ $# -gt 0 ]; do case "$1" in -f) in="$2"; shift 2;; -o) out="$2"; shift 2;; *) shift;; esac; done\ncp "$in" "$out"\n',
   claude: '#!/bin/sh\n[ -n "$FAKE_FAIL" ] && exit 1\ncat >/dev/null\necho "resumen de claude"\n',
-  codex: '#!/bin/sh\nwhile [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done\ncat >/dev/null\necho "resumen de codex" > "$out"\n',
-  agy: '#!/bin/sh\necho "resumen de antigravity"\n',
 };
 
 function setup() {
@@ -92,7 +91,7 @@ test("on, then a full Claude turn renders a summary at the announced path", () =
   assert.ok(waitFor(second));
   const index = readFileSync(join(env.VOZ_HOME, "index.jsonl"), "utf8").trim().split("\n").map(JSON.parse);
   assert.equal(index.length, 2);
-  assert.deepEqual([index[1].conversation, index[1].harness, index[1].summarizer], ["t3-thread-1", "claude", "claude"]);
+  assert.deepEqual([index[1].conversation, index[1].harness, index[1].summarizer], ["t3-thread-1", "claude", "haiku"]);
 });
 
 test("a provider switch in the same T3 thread keeps voice mode on, even after an interrupted turn", () => {
@@ -103,9 +102,9 @@ test("a provider switch in the same T3 thread keeps voice mode on, even after an
   const out = JSON.parse(hook("prompt", "codex", { session_id: "b", prompt: "hola" }, env));
   const path = pathFrom(out.hookSpecificOutput.additionalContext);
   assert.equal(state(env).owner, "codex:b");
-  hook("stop", "codex", { session_id: "b", last_assistant_message: `ok\n![Audio](${path})` }, env);
+  hook("stop", "codex", { session_id: "b", last_assistant_message: `Listo, **todo** quedó.\n![Audio](${path})` }, env);
   assert.ok(waitFor(path));
-  assert.equal(readFileSync(path, "utf8").trim(), "resumen de codex");
+  assert.equal(readFileSync(path, "utf8").trim(), "Listo, todo quedó.");
 });
 
 test("an agent launched during the owner's turn stays quiet", () => {
@@ -138,7 +137,7 @@ test("Antigravity injects a system message once per turn and reads the reply fro
   );
   assert.equal(hook("stop", "antigravity", { conversationId: "g", transcriptPath: transcript }, env), '{"decision":"stop"}');
   assert.ok(waitFor(path));
-  assert.equal(readFileSync(path, "utf8").trim(), "resumen de antigravity");
+  assert.equal(readFileSync(path, "utf8").trim(), "Hola.");
 });
 
 test("a reply without its audio line renders nothing", () => {
